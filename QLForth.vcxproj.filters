@@ -32,6 +32,24 @@
     <ClCompile Include="src\win\WinMain.c">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
+    <ClCompile Include="src\sim\Simulator.c">
+      <Filter>Source Files\Simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\Core.c">
+      <Filter>Source Files\Forth Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\Debug.c">
+      <Filter>Source Files\Forth Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\Forth.c">
+      <Filter>Source Files\Forth Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\QLForth.c">
+      <Filter>Source Files\Forth Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\SST.c">
+      <Filter>Source Files\Forth Core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\win\ide.rc">

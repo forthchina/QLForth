@@ -1,0 +1,22 @@
+#include "windows.h"
+#include "../../inc/ide.h"
+
+// Accelerator
+
+QLFORTH ACCELERATORS
+BEGIN
+	"^O",           IDM_FILE_OPEN,          ASCII,							NOINVERT
+    "^S",           IDM_FILE_SAVE,          ASCII,							NOINVERT
+    VK_BACK,        IDM_EDIT_UNDO,          VIRTKEY,	ALT,				NOINVERT
+    VK_DELETE,      IDM_EDIT_CUT,           VIRTKEY,	SHIFT,				NOINVERT
+    VK_F3,          IDM_EDIT_FIND_NEXT,     VIRTKEY,						NOINVERT
+    "^F",           IDM_EDIT_FIND,          ASCII,							NOINVERT
+    "^R",           IDM_EDIT_REPLACE,       ASCII,							NOINVERT
+	"^B",			IDM_MAKE_BUILD,			ASCII,							NOINVERT
+
+	"^P",			IDM_SCRATCH_PAD,		ASCII,		SHIFT,				NOINVERT
+	"^J",			IDM_SCRATCH_JOINT,		ASCII,		SHIFT,				NOINVERT
+
+END
+
+IDI_ICON    ICON     "ide.ico"
