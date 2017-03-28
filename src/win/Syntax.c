@@ -297,12 +297,12 @@ static void set_style(int style, int fore, int back, char * font, int size, int 
 	SendMessage(hWndEdit, SCI_STYLESETBOLD, style, bold) ;
 }
 
-void Edit_syntax(void * notify) {
+void Edit_syntax(struct SCNotification * notify) {
 
 	fromStyled	= SendMessage(hWndEdit, SCI_GETENDSTYLED, 0, 0) ;
 	endStyled	= SendMessage(hWndEdit, SCI_LINEFROMPOSITION, fromStyled, 0) ;
 	fromStyled	= SendMessage(hWndEdit, SCI_POSITIONFROMLINE, endStyled, 0) ;
-	endStyled   = ((struct SCNotification *) notify)->position ;
+	endStyled   = notify->position ;
 
 	SendMessage(hWndEdit, SCI_STARTSTYLING, fromStyled, 0x1f);
 	while (fromStyled <= endStyled) {
@@ -405,4 +405,7 @@ void Edit_init(void) {
 	SendMessage(hWndEdit, SCI_SETMARGINTYPEN, 0, SC_MARGIN_NUMBER ) ;
 	SendMessage(hWndEdit, SCI_SETMARGINWIDTHN, 0, 
 			SendMessage(hWndEdit, SCI_TEXTWIDTH, STYLE_LINENUMBER, (LPARAM) "_9999")) ;
+
+	SendMessage(hWndEdit, SCI_SETMODEVENTMASK, SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT, 0);
+	
 }

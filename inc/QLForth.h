@@ -143,13 +143,13 @@ void	* qlforth_alloc			(int size_in_byte);
 
 // ************************************************************************************
 
-int QLForth_printf				(const char * fmt, ...);
-int QLForth_display_stack		(int base, int depth, int data1, int data2);
+int  QLForth_printf				(const char * fmt, ...);
+int  QLForth_display_stack		(int base, int depth, int data1, int data2);
+void QLForth_report				(int msg, int data1, int data2, int data3);
 
 void QLForth_init				(char * w_path);
 char * QLForth_preparation		(int size, char * w_file);
-void QLForth_interpreter		(void);
-
+void QLForth_interpreter		(void * ptr);
 
 void Core_init					(void);
 void Forth_init					(void);

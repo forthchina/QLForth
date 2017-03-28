@@ -32,6 +32,18 @@
     <ClCompile Include="src\win\Talk.c" />
     <ClCompile Include="src\win\WinMain.c" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="inc\hid.h" />
+    <ClInclude Include="inc\hidpi.h" />
+    <ClInclude Include="inc\hidsdi.h" />
+    <ClInclude Include="inc\hidusage.h" />
+    <ClInclude Include="inc\ide.h" />
+    <ClInclude Include="inc\QLForth.h" />
+    <ClInclude Include="inc\resource.h" />
+    <ClInclude Include="inc\SciLexer.h" />
+    <ClInclude Include="inc\Scintilla.h" />
+    <ClInclude Include="inc\Sci_Position.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{765D6A15-5EF3-4F03-98FC-2810A459C44E}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>

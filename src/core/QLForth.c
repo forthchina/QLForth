@@ -70,7 +70,7 @@ static char		* scan_ptr, * load_text, * text_ptr, * load_save_scan_ptr,
 				* qlforth_text_buffer, system_directory[MAX_PATH], working_directory[MAX_PATH];
 static Symbol	* root_bucket[HASH_SIZE + 1], *forth_bucket[HASH_SIZE + 1],
 				** current, ** search_order[SEARCH_ORDER_SIZE + 1];
-static int		err_flag, qlforth_text_length, display_number_base = 10;
+static int		err_flag, rebuild_flag, qlforth_text_length, display_number_base = 10;
 static jmp_buf  e_buf;
 
 // ************************************************************************************
@@ -465,7 +465,6 @@ static void qlforth_init(void) {
 	Forth_init();
 
 	current = root_bucket;
-	ql4thvm_guard = ql4thvm_here;
 	forth_clear();
 }
 
@@ -487,13 +486,7 @@ void QLForth_error(char * msg, char * tk) {
 		}
 	}
 	err_flag = line;
-	if (line == 1) {
-		QLForth_printf("Error : %s\n", buffer);
-	}
-	else {
-		QLForth_printf("Error at line %d : %s\n", line, buffer);
-	}
-
+	QLForth_report(1, line - 1, scan_ptr - text_ptr, (int) buffer);
 	longjmp(e_buf, -1) ;	
 }
 
@@ -575,6 +568,7 @@ char * QLForth_preparation(int size, char * w_file) {
 		if (w_file != NULL) {
 			strcpy(working_directory, w_file);
 			qlforth_init();
+			ql4thvm_guard = NULL;
 		}
 		else {
 			forth_forget();
@@ -589,7 +583,7 @@ char * QLForth_preparation(int size, char * w_file) {
 	return qlforth_text_buffer;
 }
 
-void QLForth_interpreter(void) {
+void QLForth_interpreter(void * ptr) {
 	Symbol * spc;
 
 	scan_ptr = text_ptr = qlforth_text_buffer;
@@ -656,7 +650,12 @@ void QLForth_interpreter(void) {
 			scan_ptr = load_save_scan_ptr;
 			load_text = load_save_scan_ptr = NULL;
 		}
+		if (ql4thvm_guard == NULL) {
+			QLForth_printf("Assign GUARD.\n");
+			ql4thvm_guard = ql4thvm_here;
+		}
 		QLForth_display_stack(display_number_base, ql4thvm_dp - ql4thvm_stack, ql4thvm_tos, *(ql4thvm_dp - 1));
+		QLForth_report(0,	(ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, 0);
 	}
 	ql4thvm_running = 0;
 }

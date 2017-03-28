@@ -1,21 +1,5 @@
-: TEST 10 # 20 # + ;
+: TEST  10 # 20 # + ;
 
-fdasfadsfffdsfdasfdfdasfadsfdasffdsafdasf
-fadsfadsf
-afadsfadsf
-fadsf
-afadsffdsafdasf
-afdasf
-asdfadsf
-dasfadsfadsfads
-fadfdasf
-adsfadsfadsfads
-fdsfadsfadsfads
-fadsfadsfadsfdasfdasfafdsaffdsfdsfads
+: ABC 10 # ;
 
-fdasfadsfads
-fdasfadsfa
-fdasfadsf
-fadsfads
-ffdasfdasfadsf
-dfdsafdsafadsf
+ABC

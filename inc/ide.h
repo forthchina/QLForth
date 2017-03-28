@@ -23,12 +23,10 @@
 #define IDM_EDIT_FIND		280
 #define IDM_EDIT_FIND_NEXT	285
 #define IDM_EDIT_REPLACE	290
-#define IDM_EDIT_END		299
+#define IDM_EDIT_SWAP		299
 
-#define IDM_MAKE_BUILD		310
-#define IDM_SCRATCH_PAD		320
-#define IDM_SCRATCH_JOINT	330
-
+#define IDM_TEXT_MAKE		310
+#define IDM_TEXT_BUILD		320
 
 // ************************************************************************************
 
@@ -92,12 +90,11 @@ void Edit_find			(void);
 void Edit_find_next		(void);
 void Edit_replace		(void);
 void Edit_search		(LPFINDREPLACE	pfr);
-void Edit_syntax		(void * notify);
+void Edit_syntax		(struct SCNotification * notify);
 
 void Edit_window_size	(void);
 void Edit_mouse_move	(int flag, int xPos, int yPos);
 void Console_init		(void);
-int  QLForth_printf		(char * fmt, ...);
 
 HWND Talk_window_init	(int id);
 

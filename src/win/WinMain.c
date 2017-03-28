@@ -72,9 +72,13 @@ static char * Version = "QLForth V1.0" ;
 HINSTANCE hInst;
 HWND hWndMain, hWndEdit, hWndTalk, hWndConsole, hDlgModeless;
 
-static int		view_mode, compile_source_flag, cap_flag;
-static TCHAR	szAppName[] = TEXT ("QLForth"), curr_file_name[MAX_PATH];
+static int		view_mode, cap_flag, swap_flag, SplitX, UserWidth,
+				compile_source_flag, compiled_text_position, compiled_last_line, build_all_flag;
+static TCHAR	szAppName[] = TEXT ("QLForth"), curr_file_name[MAX_PATH], 
+				working_directory[MAX_PATH];
 static UINT		messageFindReplace ;
+static TCHAR	szFindText[TEXT_LINE_SIZE], szReplText[TEXT_LINE_SIZE];
+static int		FindPos;
 
 // ************************************************************************************
 
@@ -89,8 +93,11 @@ static void new_file_buffer_for_edit(void) {
 	SendMessage(hWndEdit, SCI_SETUNDOCOLLECTION, 1, 0);
 	SendMessage(hWndEdit, SCI_SETSAVEPOINT, 0, 0);
 	SendMessage(hWndEdit, SCI_GOTOPOS, 0, 0);
+
+	compiled_text_position	= 0;
+	build_all_flag = -1;
 	
-	sprintf(title, "QLForth V1.0 - %s\n", curr_file_name);
+	sprintf(title, "QLForth V1.0 - %s (%s)\n", curr_file_name, working_directory);
 	SetWindowText(hWndMain, title);
 }
 
@@ -122,7 +129,7 @@ static void ql_file_save(void) {
 static void ql_file_open(int use_curr_file) {
 	const			char * filter = "QLForth Source File (.qlf)\0*.qlf\0All files(*.*)\0*.*\0\0";
 	FILE 			* fd;
-	char 			* buf, openName[MAX_PATH] = "\0";
+	char 			* buf, openName[MAX_PATH] = "\0", * pc;
 	int				size;
 	OPENFILENAME ofn = { sizeof(OPENFILENAME) };
 
@@ -146,6 +153,12 @@ static void ql_file_open(int use_curr_file) {
 			return;
 		}
 		strcpy(curr_file_name, openName);
+	}
+
+	GetFullPathName(curr_file_name, MAX_PATH, working_directory, &pc);
+	if (pc > working_directory) {
+		pc--;
+		*pc = 0;
 	}
 
 	new_file_buffer_for_edit();
@@ -202,10 +215,7 @@ static void display_editor_infomation(void) {
 	SendMessage(hWndTalk, QL_UPDATE,		0, 0);
 }
 
-static TCHAR szFindText[TEXT_LINE_SIZE], szReplText[TEXT_LINE_SIZE];
-static int FindPos;
-
-BOOL edit_find_text(LPFINDREPLACE pfr) {
+static BOOL ql_edit_find_text(LPFINDREPLACE pfr) {
 	int			uflag;
 	FINDTEXTEX	findtext;
 
@@ -237,89 +247,93 @@ BOOL edit_find_text(LPFINDREPLACE pfr) {
 	return TRUE;
 }
 
-static int edit_replace_text(LPFINDREPLACE pfr) {
+static int ql_edit_replace_text(LPFINDREPLACE pfr) {
 	int			uflag;
 	FINDTEXTEX	findtext;
 
 	findtext.chrg.cpMin = 0;
 	findtext.chrg.cpMax = SendMessage(hWndEdit, SCI_GETTEXTLENGTH, 0, 0);
-	findtext.lpstrText = szFindText;
+	findtext.lpstrText	= szFindText;
 	uflag = 0;
-	if (pfr->Flags & FR_MATCHCASE) uflag |= FR_MATCHCASE;
-	if (pfr->Flags & FR_WHOLEWORD) uflag |= FR_WHOLEWORD;
+	if (pfr->Flags & FR_MATCHCASE) {
+		uflag |= FR_MATCHCASE;
+	}
+	if (pfr->Flags & FR_WHOLEWORD) {
+		uflag |= FR_WHOLEWORD;
+	}
 	FindPos = SendMessage(hWndEdit, SCI_FINDTEXT, uflag, (LPARAM)&findtext);
-	if (FindPos == -1) return FALSE;
+	if (FindPos == -1) {
+		return FALSE;
+	}
 	uflag = strlen(szFindText);
 	SendMessage(hWndEdit, SCI_SETSEL, FindPos, FindPos + uflag);
 	SendMessage(hWndEdit, SCI_REPLACESEL, 0, (LPARAM)szReplText);
 	return TRUE;
 }
 
-// ****************************************************************
-
-void Edit_find(void) {
+static void ql_edit_find(void) {
 	static FINDREPLACE fr;		// must be static for modeless dialog !!!
 
-	fr.lStructSize = sizeof(FINDREPLACE);
-	fr.hwndOwner = hWndMain;
-	fr.hInstance = NULL;
-	fr.Flags = FR_DOWN;
-	fr.lpstrFindWhat = szFindText;
+	fr.lStructSize	= sizeof(FINDREPLACE);
+	fr.hwndOwner	= hWndMain;
+	fr.hInstance	= NULL;
+	fr.Flags		= FR_DOWN;
+	fr.lpstrFindWhat= szFindText;
 	fr.lpstrReplaceWith = NULL;
 	fr.wFindWhatLen = TEXT_LINE_SIZE;
 	fr.wReplaceWithLen = 0;
-	fr.lCustData = 0;
-	fr.lpfnHook = NULL;
+	fr.lCustData	= 0;
+	fr.lpfnHook		= NULL;
 	fr.lpTemplateName = NULL;
-	FindPos = 0;
-	hDlgModeless = FindText(&fr);
+	FindPos			= 0;
+	hDlgModeless	= FindText(&fr);
 }
 
-void Edit_find_next(void) {
+static void ql_edit_find_next(void) {
 	FINDREPLACE fr;
 
 	if (szFindText[0] == 0) {
-		Edit_find();
+		ql_edit_find();
 	}
 	else {
 		fr.lpstrFindWhat = szFindText;
 		fr.Flags |= FR_DOWN;
-		edit_find_text(&fr);
+		ql_edit_find_text(&fr);
 	}
 }
 
-void Edit_replace(void) {
+static void ql_edit_replace(void) {
 	static FINDREPLACE fr;		// must be static for modeless dialog !!!
 
 	fr.lStructSize = sizeof(FINDREPLACE);
-	fr.hwndOwner = hWndMain;
-	fr.hInstance = NULL;
-	fr.Flags = FR_DOWN;
-	fr.lpstrFindWhat = szFindText;
+	fr.hwndOwner	= hWndMain;
+	fr.hInstance	= NULL;
+	fr.Flags		= FR_DOWN;
+	fr.lpstrFindWhat= szFindText;
 	fr.lpstrReplaceWith = szReplText;
 	fr.wFindWhatLen = TEXT_LINE_SIZE;
 	fr.wReplaceWithLen = TEXT_LINE_SIZE;
-	fr.lCustData = 0;
-	fr.lpfnHook = NULL;
+	fr.lCustData	= 0;
+	fr.lpfnHook		= NULL;
 	fr.lpTemplateName = NULL;
-	FindPos = 0;
-	hDlgModeless = ReplaceText(&fr);
+	FindPos			= 0;
+	hDlgModeless	= ReplaceText(&fr);
 }
 
-void Edit_search(LPFINDREPLACE	pfr) {
+static void ql_edit_search(LPFINDREPLACE	pfr) {
 	if (pfr->Flags & FR_DIALOGTERM) hDlgModeless = NULL;
 	if (pfr->Flags & FR_FINDNEXT) {
-		if (!edit_find_text(pfr)) {
+		if (! ql_edit_find_text(pfr)) {
 			// Prompt_Message("No Matched for \'%s\'", pfr -> lpstrFindWhat) ;
 		}
 	}
 	if (pfr->Flags & FR_REPLACE || pfr->Flags & FR_REPLACEALL) {
-		if (!edit_replace_text(pfr)) {
+		if (! ql_edit_replace_text(pfr)) {
 			// Prompt_Message("No Matched for \'%s\'", pfr -> lpstrFindWhat) ;
 		}
 	}
 	if (pfr->Flags & FR_REPLACEALL) {
-		while (edit_replace_text(pfr));
+		while (ql_edit_replace_text(pfr));
 	}
 }
 
@@ -343,28 +357,32 @@ static void ql_build(void) {
 	char	* text;
 
 	if (SendMessage(hWndEdit, SCI_GETMODIFY, 0, 0)) {
-		if (view_mode == 0) {				// this is project working mode
-			ql_file_save();
-		}
 		SendMessage(hWndEdit, SCI_ANNOTATIONCLEARALL, 0, 0);
 		size = SendMessage(hWndEdit, SCI_GETLENGTH, 0, 0);
-		if (size != 0) {
-			text = (char *)malloc(size + 8);
-			if (text == NULL) {
-				return;
+		if (build_all_flag) {
+			ql_file_save();
+			compiled_last_line = 0;
+			if ((text = QLForth_preparation(size + 4, working_directory)) != NULL) {
+				SendMessage(hWndEdit, SCI_GETTEXT, size + 1, (LPARAM)text);
 			}
-			SendMessage(hWndEdit, SCI_GETTEXT, size + 1, (LPARAM)text);
+			else text = NULL;
+		}
+		else {
+			SendMessage(hWndEdit, SCI_SETSELECTIONSTART, compiled_text_position, 0);
+			SendMessage(hWndEdit, SCI_SETSELECTIONEND, size, 0);
+			size = SendMessage(hWndEdit, SCI_GETSELTEXT, 0, 0); 
+			if ((text = QLForth_preparation(size + 4, NULL)) != NULL) {
+				SendMessage(hWndEdit, SCI_GETSELTEXT, 0, (LPARAM) text);
+			}
+			else text = NULL;
+			SendMessage(hWndEdit, SCI_SETSEL, -1, 0);
+		}
+		if (size != 0 && text != NULL) {
 			text[size] = 0;
 			text[size + 1] = 0;
-			compile_source_flag = 1;		// set this flag for display possible error messsage
+			compile_source_flag = 1;	// set this flag for display possible error messsage
 			SendMessage(hWndTalk, QL_CLEAR_ALL, 0, 0);
-			if (view_mode == 0) {				// this is project working mode
-				// size = QLForth_build(text, curr_file_name);
-			}
-			else {
-				// size = QLForth_make(text);
-			}
-			if (size != 0) return;
+			_beginthread(QLForth_interpreter, 0, NULL);
 		}
 	}
 	SendMessage(hWndTalk, QL_UPDATE, 0, 0);
@@ -374,6 +392,7 @@ static void ql_build(void) {
 static void ql_interpret(char * str) {
 	char * ptr;
 
+	compile_source_flag = 0;				// set this flag for display possible error messsage
 	ptr = QLForth_preparation(0, NULL);
 	memmove(ptr, str, TEXT_LINE_SIZE - 2);
 	_beginthread(QLForth_interpreter, 0, NULL);
@@ -381,31 +400,52 @@ static void ql_interpret(char * str) {
 
 // ************************************************************************************
 
-void Edit_window_size(void) {
+static void edit_window_size(void) {
 	RECT rect;
-	int  user_width, talk_height, user_height,
-		edit_x, edit_y, edit_w, con_x, con_y, con_w;
+	int  talk_height, user_height, edit_x, edit_y, edit_w, con_x, con_y, con_w;
 
 	GetClientRect(hWndMain, &rect);
-	talk_height = SendMessage(hWndTalk, QL_GET_CHAR_HEIGHT, 0, 0) * 2;
-	user_width = rect.right - rect.left;
+	talk_height = (SendMessage(hWndTalk, QL_GET_CHAR_HEIGHT, 0, 0) * 50) / 20;
+	UserWidth = rect.right - rect.left;
+	if (SplitX == 0) {
+		SplitX = (UserWidth * 60) / 100;
+	}
 	user_height = rect.bottom - rect.top - talk_height;
-	edit_x = edit_y = 0;
-	edit_w = user_width / 2 - 3;
-	con_x = edit_w + 3;
-	con_y = 0;
-	con_w = user_width / 2 - 20;
-	MoveWindow(hWndEdit, edit_x, edit_y, edit_w, user_height, TRUE);
-	MoveWindow(hWndConsole, con_x, con_y, con_w, user_height, TRUE);
-	MoveWindow(hWndTalk, 0, user_height, user_width, talk_height, TRUE);
+	edit_y = con_y = 0;
+	if (swap_flag) {
+		con_x	= 0;
+		con_w	= SplitX - 2;
+		edit_x	= SplitX + 2;
+		edit_w	= UserWidth - SplitX - 2;
+
+	}
+	else {
+		edit_x	= 0;
+		edit_w	= SplitX - 2;
+		con_x	= SplitX + 2;
+		con_w	= UserWidth - SplitX - 2;
+	}
+	
+	MoveWindow(hWndEdit, edit_x, edit_y, edit_w, user_height,	TRUE);
+	MoveWindow(hWndConsole, con_x, con_y, con_w, user_height,	TRUE);
+	MoveWindow(hWndTalk, 0, user_height, UserWidth, talk_height,TRUE);
 }
 
-void Edit_mouse_move(int flag, int xPos, int yPos)
+static void ql_edit_mouse_move(int xPos, int yPos)
 {
-
+	if (cap_flag == 1) {
+		if ((xPos <= ((UserWidth * 20) / 100)) ||
+			(xPos >= ((UserWidth * 80) / 100))) {
+			return;
+		}
+		SplitX = xPos;
+		edit_window_size();
+	}
 }
 
 static void main_window_init(void) {
+	swap_flag = cap_flag = 0;
+
 	hWndEdit = CreateWindowEx(WS_EX_CLIENTEDGE, "Scintilla", "Sketch", 
 					WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL |
 					ES_LEFT | ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
@@ -429,17 +469,21 @@ static void main_window_init(void) {
 	SetFocus(hWndTalk);
 }
 
-static void process_notify(NMHDR * nmhdr, char * str) {
-	switch(nmhdr->idFrom) {
+static void process_notify(struct SCNotification * notification, char * str) {
+	switch(notification->nmhdr.idFrom) {
 		case ID_EDIT:
-			switch(nmhdr->code)  {
+			switch(notification->nmhdr.code)  {
 				case SCN_UPDATEUI:			display_editor_infomation();	break;
-				case SCN_STYLENEEDED:		Edit_syntax((void *) nmhdr);	break;
+				case SCN_STYLENEEDED:		Edit_syntax(notification);		break;
+				case SCN_MODIFIED:			if (notification->position < compiled_text_position) {
+												build_all_flag = -1;
+											}
+											break;
 			}
 			break;
 
 		case ID_TALK:
-			switch(nmhdr->code) {
+			switch(notification->nmhdr.code) {
 				case QLN_TALK_GET_FOCUS:	ql_build();						break;
 				case QLN_TALK_EXECUTE:		ql_interpret(str);				break;
 			}
@@ -447,42 +491,44 @@ static void process_notify(NMHDR * nmhdr, char * str) {
 	}
 }
 
-static void do_command(int cmd) {
-	switch(cmd) {
-		case IDM_FILE_OPEN:			ql_file_open(0);							break;	
-		case IDM_FILE_SAVE:			ql_file_save();								break;
-	
-		case IDM_EDIT_UNDO:			SendMessage(hWndEdit, WM_UNDO, 0, 0);		break;
-		case IDM_EDIT_REDO:			SendMessage(hWndEdit, SCI_REDO, 0, 0);		break ;	
-		case IDM_EDIT_CUT:			SendMessage(hWndEdit, WM_CUT, 0, 0);		break;
-		case IDM_EDIT_COPY:			SendMessage(hWndEdit, WM_COPY, 0, 0);		break ;	
-		case IDM_EDIT_PASTE:		SendMessage(hWndEdit, WM_PASTE, 0, 0);		break;		
-		case IDM_EDIT_CLEAR:		SendMessage(hWndEdit, WM_CLEAR, 0, 0);		break;
-		case IDM_EDIT_SEL_ALL:		SendMessage(hWndEdit,SCI_SELECTALL, 0, 0);	break;
-		case IDM_EDIT_FIND:			Edit_find();	            				break;
-		case IDM_EDIT_FIND_NEXT:	Edit_find_next();							break;
-		case IDM_EDIT_REPLACE:		Edit_replace();								break;
-
-		case IDM_MAKE_BUILD:		ql_build();									break;
-	}
-}
-
 // ************************************************************************************
 
 LRESULT CALLBACK MainWndProc(HWND hwnd,UINT msg, WPARAM wParam,LPARAM lParam) {
 	switch (msg) {
-		case WM_CREATE:			hWndMain = hwnd;		main_window_init();			        break;
-		case WM_SIZE:			Edit_window_size();											break;
+		case WM_CREATE:			hWndMain = hwnd;		main_window_init();					break;
+		case WM_SIZE:			edit_window_size();											break;
 
 		case WM_CAPTURECHANGED:	cap_flag = 0;												break;
 		case WM_LBUTTONDOWN:	cap_flag = 1;	SetCapture(hwnd);							break;
-		case WM_MOUSEMOVE:		Edit_mouse_move(cap_flag, LOWORD(lParam), HIWORD(lParam));	break;
-		case WM_LBUTTONUP:		Edit_mouse_move(cap_flag, LOWORD(lParam), HIWORD(lParam));	
+		case WM_MOUSEMOVE:		ql_edit_mouse_move(LOWORD(lParam), HIWORD(lParam));			break;
+		case WM_LBUTTONUP:		ql_edit_mouse_move(LOWORD(lParam), HIWORD(lParam));	
 								cap_flag = 0;	ReleaseCapture();							break;
 
 
-   		case WM_COMMAND:		do_command(LOWORD(wParam));									break;
-		case WM_NOTIFY:			process_notify((NMHDR *) lParam, (char *) wParam);          break;
+		case WM_COMMAND:
+ 			switch (LOWORD(wParam)) {
+				case IDM_FILE_OPEN:			ql_file_open(0);								break;
+				case IDM_FILE_SAVE:			ql_file_save();									break;
+
+				case IDM_EDIT_UNDO:			SendMessage(hWndEdit, WM_UNDO, 0, 0);			break;
+				case IDM_EDIT_REDO:			SendMessage(hWndEdit, SCI_REDO, 0, 0);			break;
+				case IDM_EDIT_CUT:			SendMessage(hWndEdit, WM_CUT, 0, 0);			break;
+				case IDM_EDIT_COPY:			SendMessage(hWndEdit, WM_COPY, 0, 0);			break;
+				case IDM_EDIT_PASTE:		SendMessage(hWndEdit, WM_PASTE, 0, 0);			break;
+				case IDM_EDIT_CLEAR:		SendMessage(hWndEdit, WM_CLEAR, 0, 0);			break;
+				case IDM_EDIT_SEL_ALL:		SendMessage(hWndEdit, SCI_SELECTALL, 0, 0);		break;
+
+				case IDM_EDIT_FIND:			ql_edit_find();	            					break;
+				case IDM_EDIT_FIND_NEXT:	ql_edit_find_next();							break;
+				case IDM_EDIT_REPLACE:		ql_edit_replace();								break;
+				case IDM_EDIT_SWAP:			swap_flag = ~swap_flag;  edit_window_size();	break;
+				
+				case IDM_TEXT_MAKE:			ql_build();										break;
+				case IDM_TEXT_BUILD:		build_all_flag = -1;	 ql_build();			break;
+			}
+			break;
+			
+		case WM_NOTIFY:			process_notify((struct SCNotification *) lParam, (char *) wParam);	break;
 
 		case WM_DEVICECHANGE:
 			{ 	PDEV_BROADCAST_HDR lpdb = (PDEV_BROADCAST_HDR)lParam ;
@@ -497,7 +543,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd,UINT msg, WPARAM wParam,LPARAM lParam) {
 
 		default:	
 			if (msg == messageFindReplace) { 
-				Edit_search((LPFINDREPLACE) lParam) ;
+				ql_edit_search((LPFINDREPLACE) lParam) ;
                 return 0 ;
 			}
 			return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -589,4 +635,38 @@ int QLForth_printf(const char * fmt, ...) {
 	SendMessage(hWndConsole, SCI_GOTOPOS, lineStart, 0);
 	SendMessage(hWndConsole, SCI_SETREADONLY, TRUE, 0);
 	return len;
+}
+
+void QLForth_report(int msg, int data1, int data2, int data3) {
+	switch (msg) {
+		case 0:
+			if (compile_source_flag) {
+				QLForth_printf("Used Dictionary Space : %d of %d Bytes\n", data1, data2);
+				if (build_all_flag) {
+					compiled_last_line = SendMessage(hWndEdit, SCI_GETLINECOUNT, 0, 0);
+					compiled_text_position = SendMessage(hWndEdit, SCI_POSITIONFROMLINE, compiled_last_line, 0);
+					compiled_last_line ++;
+				}
+				build_all_flag = 0;
+				SetFocus(hWndTalk);
+			}
+			break;
+
+		case 1:
+			if (compile_source_flag) {
+				SendMessage(hWndEdit, SCI_ANNOTATIONSETSTYLE, data1, SCE_ANNOTATION_ERROR);
+				SendMessage(hWndEdit, SCI_ANNOTATIONSETTEXT, data1, (LPARAM)data3);
+				SendMessage(hWndEdit, SCI_GOTOLINE, compiled_last_line + data1, 0);
+				SetFocus(hWndEdit);
+			}
+			else {
+				SendMessage(hWndTalk, QL_SET_COLOR, QL_PART_PROMPT, RGB(0xFF, 0x00, 0x00));
+				SendMessage(hWndTalk, QL_SET_TEXT, QL_PART_PROMPT, (LPARAM)data3);
+				SendMessage(hWndTalk, QL_UPDATE, 0, 0);
+			}
+			break;
+
+		case 2:
+			break;
+	}
 }
