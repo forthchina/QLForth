@@ -9,9 +9,6 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
-    <Filter Include="Source Files\Simulation">
-      <UniqueIdentifier>{d5f876aa-6311-4fab-8e56-5c32a6f0589e}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\Forth Core">
       <UniqueIdentifier>{b1250fd7-6450-4446-bd7d-7c2042ded0db}</UniqueIdentifier>
     </Filter>
@@ -20,6 +17,9 @@
     </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{34975e98-942f-46d0-8758-8624e6b3c24f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Chip">
+      <UniqueIdentifier>{d5f876aa-6311-4fab-8e56-5c32a6f0589e}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -32,23 +32,23 @@
     <ClCompile Include="src\win\WinMain.c">
       <Filter>Source Files\Windows</Filter>
     </ClCompile>
-    <ClCompile Include="src\sim\Simulator.c">
-      <Filter>Source Files\Simulation</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\Core.c">
       <Filter>Source Files\Forth Core</Filter>
     </ClCompile>
     <ClCompile Include="src\core\Debug.c">
       <Filter>Source Files\Forth Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\Forth.c">
-      <Filter>Source Files\Forth Core</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\QLForth.c">
       <Filter>Source Files\Forth Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\SST.c">
-      <Filter>Source Files\Forth Core</Filter>
+    <ClCompile Include="src\chip\FCC.c">
+      <Filter>Source Files\Chip</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chip\SIM.c">
+      <Filter>Source Files\Chip</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chip\SST.c">
+      <Filter>Source Files\Chip</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

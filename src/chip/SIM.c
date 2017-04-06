@@ -6,7 +6,7 @@
 *
 * Project: 	    QLForth - A Forth for System-On-Chip Creative Makers
 *
-* Title:	    Simulator.c
+* Title:	    SIM.c
 *
 * Description:	The chip simulator for QLForth
 *

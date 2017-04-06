@@ -35,7 +35,9 @@ QLForth is built with VS2015 Community, only C and Windows SDK features has been
 # About Naming
 QL is the abbreviation of Qinling (Qinling Mountains). Qinling provides a natural boundary between North and South China and support a huge variety of plant and wildlife, some of which is found nowhere else on Earth.
 
-[in Simple Chinese]
+
+----------
+
 
 # QLForth  [**in Simple Chinese**, 简体中文] 
 

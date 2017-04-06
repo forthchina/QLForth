@@ -6,7 +6,7 @@
 *
 * Project: 	    QLForth - A Forth for System-On-Chip Creative Makers
 *
-* Title:	    main.c
+* Title:	    FCC.c
 *
 * Description:	The Cross Compile functions for QLForth
 *

@@ -22,12 +22,12 @@
     <ResourceCompile Include="src\win\ide.rc" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\chip\FCC.c" />
+    <ClCompile Include="src\chip\SIM.c" />
+    <ClCompile Include="src\chip\SST.c" />
     <ClCompile Include="src\core\Core.c" />
     <ClCompile Include="src\core\Debug.c" />
-    <ClCompile Include="src\core\Forth.c" />
     <ClCompile Include="src\core\QLForth.c" />
-    <ClCompile Include="src\core\SST.c" />
-    <ClCompile Include="src\sim\Simulator.c" />
     <ClCompile Include="src\win\Syntax.c" />
     <ClCompile Include="src\win\Talk.c" />
     <ClCompile Include="src\win\WinMain.c" />
