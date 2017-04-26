@@ -69,8 +69,8 @@ static KeyWord	* bucket[HASH_SIZE + 1];
 static KeyWord  key_table[] = {
 	{ ":",				SSC_DEFINE_WORD },
 	{ "VARIABLE",		SSC_DEFINE_WORD },
-	{ "CREATE",			SSC_DEFINE_WORD },
-	{ "DOES>",			SSC_DEFINE_WORD },
+//	{ "CREATE",			SSC_DEFINE_WORD },
+//	{ "DOES>",			SSC_DEFINE_WORD },
 	
 	{ ";",				SSC_IMMEDIATE	},
 	{ "\'",				SSC_IMMEDIATE	},
@@ -80,10 +80,6 @@ static KeyWord  key_table[] = {
 	{ "ELSE",			SSC_IMMEDIATE	},
 	{ "ENDIF",			SSC_IMMEDIATE	},
 	{ "THEN",			SSC_IMMEDIATE	},
-	{ "CASE",			SSC_IMMEDIATE	},
-	{ "OF",				SSC_IMMEDIATE	},
-	{ "ENDOF",			SSC_IMMEDIATE	},
-	{ "ENDCASE",		SSC_IMMEDIATE	},
 	{ "BEGIN",			SSC_IMMEDIATE	},
 	{ "WHILE",			SSC_IMMEDIATE	},
 	{ "AGAIN",			SSC_IMMEDIATE	},

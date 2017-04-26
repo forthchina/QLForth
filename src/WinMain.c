@@ -80,6 +80,8 @@ static UINT		messageFindReplace ;
 static TCHAR	szFindText[TEXT_LINE_SIZE], szReplText[TEXT_LINE_SIZE];
 static int		FindPos;
 
+static void ql_build(void);
+
 // ************************************************************************************
 
 static void new_file_buffer_for_edit(void) {
@@ -95,8 +97,6 @@ static void new_file_buffer_for_edit(void) {
 	SendMessage(hWndEdit, SCI_GOTOPOS, 0, 0);
 
 	compiled_text_position	= 0;
-	build_all_flag = -1;
-	
 	sprintf(title, "QLForth V1.0 - %s (%s)\n", curr_file_name, working_directory);
 	SetWindowText(hWndMain, title);
 }
@@ -176,6 +176,7 @@ static void ql_file_open(int use_curr_file) {
 		SendMessage(hWndEdit, SCI_ADDTEXT, size, (LPARAM)buf);
 		SendMessage(hWndEdit, SCI_COLOURISE, 0, (LPARAM)-1);
 		free(buf);
+		build_all_flag = -1;
 	}
 
 	fclose(fd);
@@ -183,6 +184,7 @@ static void ql_file_open(int use_curr_file) {
 	SendMessage(hWndEdit, EM_EMPTYUNDOBUFFER, 0, 0);
 	SendMessage(hWndEdit, SCI_SETSAVEPOINT, 0, 0);
 	SendMessage(hWndEdit, SCI_GOTOPOS, 0, 0);
+
 }
 
 static void ql_file_init(void) {
@@ -199,6 +201,9 @@ static void app_start(void) {
 	for (; pc > path && * pc != '\\' ; pc --);
 	if (* pc == '\\') * pc = 0;
 	QLForth_init(path);
+	if (build_all_flag) {
+		ql_build();
+	}
 }
 
 // ************************************************************************************
@@ -356,7 +361,7 @@ static void ql_build(void) {
 	int		size;
 	char	* text;
 
-	if (SendMessage(hWndEdit, SCI_GETMODIFY, 0, 0)) {
+	if (build_all_flag || SendMessage(hWndEdit, SCI_GETMODIFY, 0, 0)) {
 		SendMessage(hWndEdit, SCI_ANNOTATIONCLEARALL, 0, 0);
 		size = SendMessage(hWndEdit, SCI_GETLENGTH, 0, 0);
 		if (build_all_flag) {
@@ -660,7 +665,7 @@ void QLForth_report(int msg, int data1, int data2, int data3) {
 				SetFocus(hWndEdit);
 			}
 			else {
-				SendMessage(hWndTalk, QL_SET_COLOR, QL_PART_PROMPT, RGB(0xFF, 0x00, 0x00));
+				SendMessage(hWndTalk, QL_SET_COLOR, QL_PART_PROMPT, RGB(0x00, 0x00, 0xFF));
 				SendMessage(hWndTalk, QL_SET_TEXT, QL_PART_PROMPT, (LPARAM)data3);
 				SendMessage(hWndTalk, QL_UPDATE, 0, 0);
 			}

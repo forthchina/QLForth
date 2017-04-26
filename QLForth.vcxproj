@@ -19,20 +19,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="src\win\ide.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="src\chip\FCC.c" />
-    <ClCompile Include="src\chip\SIM.c" />
-    <ClCompile Include="src\chip\SST.c" />
-    <ClCompile Include="src\core\Core.c" />
-    <ClCompile Include="src\core\Debug.c" />
-    <ClCompile Include="src\core\QLForth.c" />
-    <ClCompile Include="src\win\Syntax.c" />
-    <ClCompile Include="src\win\Talk.c" />
-    <ClCompile Include="src\win\WinMain.c" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="inc\hid.h" />
     <ClInclude Include="inc\hidpi.h" />
     <ClInclude Include="inc\hidsdi.h" />
@@ -43,6 +29,20 @@
     <ClInclude Include="inc\SciLexer.h" />
     <ClInclude Include="inc\Scintilla.h" />
     <ClInclude Include="inc\Sci_Position.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\ide.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Code.c" />
+    <ClCompile Include="src\Compiler.c" />
+    <ClCompile Include="src\Forth.c" />
+    <ClCompile Include="src\Primitive.c" />
+    <ClCompile Include="src\QLForth.c" />
+    <ClCompile Include="src\Simulator.c" />
+    <ClCompile Include="src\Syntax.c" />
+    <ClCompile Include="src\Talk.c" />
+    <ClCompile Include="src\WinMain.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{765D6A15-5EF3-4F03-98FC-2810A459C44E}</ProjectGuid>

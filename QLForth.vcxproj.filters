@@ -9,52 +9,9 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
-    <Filter Include="Source Files\Forth Core">
-      <UniqueIdentifier>{b1250fd7-6450-4446-bd7d-7c2042ded0db}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\Windows">
-      <UniqueIdentifier>{435db02c-3889-43a1-9c16-dfe9c4a74274}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{34975e98-942f-46d0-8758-8624e6b3c24f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\Chip">
-      <UniqueIdentifier>{d5f876aa-6311-4fab-8e56-5c32a6f0589e}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="src\win\Syntax.c">
-      <Filter>Source Files\Windows</Filter>
-    </ClCompile>
-    <ClCompile Include="src\win\Talk.c">
-      <Filter>Source Files\Windows</Filter>
-    </ClCompile>
-    <ClCompile Include="src\win\WinMain.c">
-      <Filter>Source Files\Windows</Filter>
-    </ClCompile>
-    <ClCompile Include="src\core\Core.c">
-      <Filter>Source Files\Forth Core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\core\Debug.c">
-      <Filter>Source Files\Forth Core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\core\QLForth.c">
-      <Filter>Source Files\Forth Core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\chip\FCC.c">
-      <Filter>Source Files\Chip</Filter>
-    </ClCompile>
-    <ClCompile Include="src\chip\SIM.c">
-      <Filter>Source Files\Chip</Filter>
-    </ClCompile>
-    <ClCompile Include="src\chip\SST.c">
-      <Filter>Source Files\Chip</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="src\win\ide.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="inc\hid.h">
@@ -87,5 +44,39 @@
     <ClInclude Include="inc\Scintilla.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\ide.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Code.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QLForth.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Syntax.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Talk.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\WinMain.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Simulator.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Compiler.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Forth.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Primitive.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

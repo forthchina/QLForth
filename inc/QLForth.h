@@ -25,49 +25,60 @@
 
 #endif
 
-#define TEXT_LINE_SIZE			128
-#define NAME_LENGTH				64	
-#define STACK_DEEP_SIZE			256
-#define DICT_BUFFER_SIZE		(1024 * 1024)		// this will take 4MB for QLF_CELL 
-#define TEXT_BUFFER_STEP		16384				// QLFORTH inner text buffer step = 16KB
-		
-#define USB_REPORT_SIZE			64
-
-#define REPORT_PROCESS_OK		(1 << 0)
-#define REPORT_PROCESS_WAIT		(1 << 1)
-#define REPORT_PROCESS_FAULT	(1 << 2)
-#define REPORT_PROCESS_ERROR	(1 << 3)
-
-#define OPCODE					1
-#define ADDRESS					(OPCODE	+ 1)
-#define COUNT					(OPCODE	+ 2)
-#define SEQUENCE				(OPCODE	+ 3)
-
-typedef void (* PRIMITIVE_FUNCTION) (void) ;
-
-#define QLF_STATE_INTERPRET		0
-#define QLF_STATE_COMPILE		1
-#define QLF_STATE_CORE			2
-#define QLF_STATE_CODE			3
-
 typedef enum {
-	MAX_CONTROL_STACK_DEEP	= 32,
+	QLF_TRUE = -1L,
+	QLF_FALSE = 0L,
 
-	QLF_TRUE	= -1L,
-	QLF_FALSE	= 0L,
+	TEXT_LINE_SIZE			= 128,
+	NAME_LENGTH				= 64,	
+	STACK_DEEP_SIZE			= 256,
+	DICT_BUFFER_SIZE		= (1024 * 1024),			// this will take 4MB for QLF_CELL 
+	TEXT_BUFFER_STEP		= 16384,					// QLFORTH inner text buffer step = 16KB
+	SST_NODE_MAX			= 65535,	
+	MAX_CONTROL_STACK_DEEP	= 128,
 
-	QLF_TYPE_PRIMITIVE = 0,			QLF_TYPE_IMMEDIATE,
-	QLF_TYPE_DEFINE,				QLF_TYPE_COMPILE,
-	QLF_TYPE_VARIABLE,				QLF_TYPE_CONSTANT,
-	QLF_TYPE_CORE,					QLF_TYPE_WORD,
+	QLF_STATE_INTERACTIVE	= 0,
+	QLF_STATE_INTERPRET		= 1,
+	QLF_STATE_COMPILE		= 2,
+
+	QLF_TYPE_COMMAND		= 0,
+	QLF_TYPE_DEFINE,	
+	QLF_TYPE_PRIMITIVE,
+	QLF_TYPE_IMMEDIATE,
+	QLF_TYPE_COMPILE,
+	QLF_TYPE_WORD,
+	QLF_TYPE_VARIABLE,		
+	QLF_TYPE_CONSTANT,
 	QLF_TYPE_VOCABULARY,
-		
+	
+	TOKEN_END_OF_FILE		= 0,		
+	TOKEN_UNKOWN,		
+	TOKEN_WORD,		
+	TOKEN_STRING,
 
-	TOKEN_END_OF_FILE	= 0,		TOKEN_UNKOWN		= 1,		
-	TOKEN_WORD			= 2,		TOKEN_STRING		= 3,
+	SST_NOOP = 0,
+	SST_COLON,		SST_RET,		SST_SEMICOLON,	SST_VARIABLE,		
+	SST_LITERAL,	SST_VAR_REF,	SST_WORD_REF,
+	SST_LABEL,		SST_0_BRANCH,	SST_BRANCH,		
+	SST_DO,			SST_LOOP,		SST_LEAVE,		SST_I,			SST_J,		
+	SST_FOR,		SST_NEXT,
+	SST_FETCH,		SST_STORE,		SST_ALLOT,
+
+	SST_ADD,		SST_XOR,		SST_AND,		SST_OR,			SST_INVERT, 
+	SST_EQUAL,		SST_LT, 		SST_U_LT,		SST_SWAP,		SST_DUP, 
+	SST_DROP,		SST_OVER,		SST_NIP,		SST_TO_R,		SST_R_FROM, 
+	SST_R_FETCH, 	SST_DSP, 		SST_LSHIFT,		SST_RSHIFT, 
+	SST_1_SUB,		SST_2_R_FROM, 	SST_2_TO_R, 	SST_2_R_FETCH, 	SST_UNLOOP, 
+	
+	SST_DUP_FETCH,	SST_DUP_TO_R,	SST_2_DUP_XOR,	SST_2_DUP_EQUAL,
+	SST_STORE_NIP,	SST_2_DUP_STORE,SST_UP_1,		SST_DOWN_1, 	SST_COPY,
+
+	SST_END,
 	
 	END_OF_QLFORTH_CONSTANT 
 } QLFORTH_CONSTANT ;
+
+typedef void(*PRIMITIVE_FUNCTION) (void);
 
 typedef struct _tag_primitive {
     char * pname;
@@ -86,6 +97,7 @@ typedef struct _tag_symbol {
 		PRIMITIVE_FUNCTION fun;
 		struct  _tag_symbol * sub_link;
 		char	* scan_ptr;
+		struct  _sst_node * sst;
 	};
 
 	union {
@@ -110,6 +122,16 @@ typedef struct _tag_constant_pool {
 	char		* pos;
 } CONSTANT_POOL;
 
+typedef struct _sst_node {
+	int location;												// for target memory position;
+	union {
+		int					val;
+		Symbol				* spc;
+		struct _sst_node	* sst;
+	};
+	char	type, not_used;
+} SSTNode;
+
 // ************************************************************************************
 
 extern QLF_LITERAL	token_value;
@@ -118,6 +140,7 @@ extern QLF_CELL *	ql4thvm_here,
 extern Symbol		** program_counter, * ThisCreateWord, * ThisExecuteWord;
 extern char			token_word[TEXT_LINE_SIZE];
 extern int			ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
+extern SSTNode		* sst_current;
 
 // ************************************************************************************
 
@@ -140,7 +163,6 @@ extern int			ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
 void	qlforth_fp_docreate		(void);
 void	* qlforth_alloc			(int size_in_byte);
 
-
 // ************************************************************************************
 
 int  QLForth_printf				(const char * fmt, ...);
@@ -150,24 +172,25 @@ void QLForth_report				(int msg, int data1, int data2, int data3);
 void QLForth_init				(char * w_path);
 char * QLForth_preparation		(int size, char * w_file);
 void QLForth_interpreter		(void * ptr);
-
-void Core_init					(void);
-void Forth_init					(void);
 int  QLForth_token				(void);
 void QLForth_error				(char * msg, char * tk); 
 Symbol * QLForth_symbol_search  (char * name);
 Symbol * QLForth_symbol_add		(char * name);
 Symbol * QLForth_create			(void);
 
-void QLForth_compile_word		(QLF_CELL dfa);
-void QLForth_compile_variable	(QLF_CELL dfa);
-void QLForth_compile_literal	(QLF_CELL ival);
-void QLForth_debug_word			(QLF_CELL dfa);
-void QLForth_debug_variable		(QLF_CELL dfa);
+SSTNode * QLForth_sst_append	(int type, int val);
+
+void Primitive_init				(void);
+void Forth_init					(void);
+void Compile_init				(void);
+void QLForth_sst_list			(SSTNode * start, SSTNode * sst);
+
+void Code_init					(void);
+void Code_generation			(SSTNode * start);
 
 int	 QLForth_chip_read			(int vpc);
 void QLForth_chip_write			(int vpc, int data);
-void QLForth_chip_program		(int vpc, int data);
+void QLForth_chip_program		(unsigned char * code_buffer);
 int  QLForth_chip_execute		(int vpc, int depth, int * dstack);
 
 #endif // _QLFORTH_H_

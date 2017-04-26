@@ -67,7 +67,7 @@ static LOGFONT LogFontPack = {
 } ;
 
 static LOGFONT LogFontText = {
-	-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+	-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
 	OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 	DEFAULT_PITCH | FF_DONTCARE, TEXT("Arial")
 } ;
@@ -259,9 +259,9 @@ static void size_me(void) {
 
 	y = UserHeight - cyChar - 4;
 
-	sb_prompt.rect.top		= y;
+	sb_prompt.rect.top		= y + 6;
 	sb_prompt.rect.bottom	= rect.bottom;
-	sb_prompt.rect.left		= 4 ;
+	sb_prompt.rect.left		= 8 ;
 	sb_prompt.rect.right	= x1 - 2;
 	
 	sb_mode.rect.top		= y;
