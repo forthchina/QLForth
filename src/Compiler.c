@@ -42,9 +42,6 @@
 * POSSIBILITY OF SUCH DAMAGE.
 * ********************************************************************************** */
 
-#include <windows.h>
-#include <math.h>
-
 #include "QLForth.h"
 #include "QLSOC.h"
 

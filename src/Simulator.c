@@ -43,10 +43,6 @@
 * POSSIBILITY OF SUCH DAMAGE.
 * ********************************************************************************** */
 
-#include <windows.h>
-#include <stdio.h>
-#include <stdarg.h>
-
 #include "QLForth.h"
 #include "QLSOC.h"
 

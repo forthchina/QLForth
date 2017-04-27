@@ -42,9 +42,6 @@
 * POSSIBILITY OF SUCH DAMAGE.
 * ********************************************************************************** */
 
-#include <windows.h>
-#include <math.h>
-
 #include "QLForth.h"
 #include "QLSOC.h"
 
@@ -165,7 +162,6 @@ void Code_init(void) {
 }
 
 void Code_generation(SSTNode * sst_start) {
-	int opcode;
 
 	if (code_ptr != (CODE_START + 2)) {
 		code_ptr = code_ptr_save;
