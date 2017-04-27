@@ -25,6 +25,25 @@
 
 #endif
 
+#if defined(_WIN32)					// Winodws platform
+
+#include <windows.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <process.h>
+#include <math.h>
+#include <string.h>
+#include <stdlib.h>
+#include <setjmp.h>
+
+#else 
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#endif
+
 typedef enum {
 	QLF_TRUE = -1L,
 	QLF_FALSE = 0L,
@@ -36,6 +55,7 @@ typedef enum {
 	TEXT_BUFFER_STEP		= 16384,					// QLFORTH inner text buffer step = 16KB
 	SST_NODE_MAX			= 65535,	
 	MAX_CONTROL_STACK_DEEP	= 128,
+	HASH_SIZE				= 127,
 
 	QLF_STATE_INTERACTIVE	= 0,
 	QLF_STATE_INTERPRET		= 1,
@@ -56,22 +76,26 @@ typedef enum {
 	TOKEN_WORD,		
 	TOKEN_STRING,
 
-	SST_NOOP = 0,
-	SST_COLON,		SST_RET,		SST_SEMICOLON,	SST_VARIABLE,		
-	SST_LITERAL,	SST_VAR_REF,	SST_WORD_REF,
-	SST_LABEL,		SST_0_BRANCH,	SST_BRANCH,		
-	SST_DO,			SST_LOOP,		SST_LEAVE,		SST_I,			SST_J,		
-	SST_FOR,		SST_NEXT,
-	SST_FETCH,		SST_STORE,		SST_ALLOT,
-
-	SST_ADD,		SST_XOR,		SST_AND,		SST_OR,			SST_INVERT, 
-	SST_EQUAL,		SST_LT, 		SST_U_LT,		SST_SWAP,		SST_DUP, 
-	SST_DROP,		SST_OVER,		SST_NIP,		SST_TO_R,		SST_R_FROM, 
-	SST_R_FETCH, 	SST_DSP, 		SST_LSHIFT,		SST_RSHIFT, 
-	SST_1_SUB,		SST_2_R_FROM, 	SST_2_TO_R, 	SST_2_R_FETCH, 	SST_UNLOOP, 
+	CSID_COLON				= 1,
+	CSID_IF,			CSID_ELSE,		CSID_ENDIF,			CSID_BEGIN, 
+	CSID_WHILE,			CSID_DO,		CSID_LEAVE,			CSID_FOR,
 	
-	SST_DUP_FETCH,	SST_DUP_TO_R,	SST_2_DUP_XOR,	SST_2_DUP_EQUAL,
-	SST_STORE_NIP,	SST_2_DUP_STORE,SST_UP_1,		SST_DOWN_1, 	SST_COPY,
+	SST_NOOP				= 0,		// COMMON OPCODE
+	SST_COLON,			SST_RET,		SST_SEMICOLON,		SST_VARIABLE,		
+	SST_LITERAL,		SST_VAR_REF,	SST_WORD_REF,		SST_LABEL,		
+	SST_0_BRANCH,		SST_BRANCH,		SST_DO,				SST_LOOP,		
+	SST_LEAVE,			SST_I,			SST_J,				SST_FOR,		
+	SST_NEXT,			SST_FETCH,		SST_STORE,			SST_ALLOT,
+
+	SST_ADD,							// CHIP ASSEMBLY
+	SST_XOR,			SST_AND,		SST_OR,				SST_INVERT, 
+	SST_EQUAL,			SST_LT, 		SST_U_LT,			SST_SWAP,		
+	SST_DUP,			SST_DROP,		SST_OVER,			SST_NIP,		
+	SST_TO_R,			SST_R_FROM,		SST_R_FETCH, 		SST_DSP, 		
+	SST_LSHIFT,			SST_RSHIFT,		SST_1_SUB,			SST_2_R_FROM, 	
+	SST_2_TO_R, 		SST_2_R_FETCH, 	SST_UNLOOP,			SST_DUP_FETCH,	
+	SST_DUP_TO_R,		SST_2_DUP_XOR,	SST_2_DUP_EQUAL,	SST_STORE_NIP,	
+	SST_2_DUP_STORE,	SST_UP_1,		SST_DOWN_1, 		SST_COPY,
 
 	SST_END,
 	
@@ -111,11 +135,6 @@ typedef struct _tag_symbol {
 	char type, hidden, attr, name[1];
 } Symbol;
 
-typedef struct _core_mem_map {
-	int	 base, size;
-	char *  start, * here, * end;
-} CORE_MEMORY_MAP;
-
 typedef struct _tag_constant_pool {
 	int			reg;
 	QLF_CELL	val;
@@ -132,15 +151,19 @@ typedef struct _sst_node {
 	char	type, not_used;
 } SSTNode;
 
+typedef struct _cstack {
+	int			id;
+	union {
+		QLF_CELL	* pos;
+		SSTNode		* sst;
+	};
+
+} CONTROL_STACK;
+
 // ************************************************************************************
 
-extern QLF_LITERAL	token_value;
-extern QLF_CELL *	ql4thvm_here,
-					ql4thvm_tos, * ql4thvm_dp, * ql4thvm_rp, * ql4thvm_stack_top, * ql4thvm_stack;
-extern Symbol		** program_counter, * ThisCreateWord, * ThisExecuteWord;
-extern char			token_word[TEXT_LINE_SIZE];
-extern int			ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
-extern SSTNode		* sst_current;
+extern QLF_CELL		ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
+extern char			token_word[];
 
 // ************************************************************************************
 
@@ -169,22 +192,16 @@ int  QLForth_printf				(const char * fmt, ...);
 int  QLForth_display_stack		(int base, int depth, int data1, int data2);
 void QLForth_report				(int msg, int data1, int data2, int data3);
 
-void QLForth_init				(char * w_path);
-char * QLForth_preparation		(int size, char * w_file);
-void QLForth_interpreter		(void * ptr);
+void QLForth_init				(char * file_name);
+void QLForth_interpreter		(char * text);
+void QLForth_stop				(void);
 int  QLForth_token				(void);
 void QLForth_error				(char * msg, char * tk); 
 Symbol * QLForth_symbol_search  (char * name);
 Symbol * QLForth_symbol_add		(char * name);
-Symbol * QLForth_create			(void);
-
 SSTNode * QLForth_sst_append	(int type, int val);
-
-void Primitive_init				(void);
-void Forth_init					(void);
 void Compile_init				(void);
 void QLForth_sst_list			(SSTNode * start, SSTNode * sst);
-
 void Code_init					(void);
 void Code_generation			(SSTNode * start);
 

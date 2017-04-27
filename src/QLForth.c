@@ -42,66 +42,102 @@
 * POSSIBILITY OF SUCH DAMAGE.
 * ********************************************************************************** */
 
-#include <windows.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <setjmp.h>
- 
 #include "QLForth.h"
 
-#define LOAD_FILE_STACK_DEEP	16
-#define SEARCH_ORDER_SIZE		8
-#define HASH_SIZE				127 
-#define CONSTANT_POOL_SIZE		32
-
-QLF_LITERAL		token_value;
-QLF_CELL		* ql4thvm_here,
-				ql4thvm_tos, * ql4thvm_dp, * ql4thvm_rp, * ql4thvm_stack_top, * ql4thvm_stack;
-Symbol			** program_counter, * ThisCreateWord, *ThisExecuteWord ;
+QLF_CELL		ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
 char			token_word[TEXT_LINE_SIZE];
-int				ql4thvm_state, ql4thvm_running, ql4thvm_force_break ;
-SSTNode			* sst_current;
 
+static Symbol	* ThisCreateWord, *ThisExecuteWord ;
 static QLF_CELL dict_buffer[DICT_BUFFER_SIZE + 4], data_return_stack[STACK_DEEP_SIZE + 2],
-				* ql4thvm_dict_top, * ql4thvm_dict, * ql4thvm_guard;
-static char		* scan_ptr, * load_text, * text_ptr, * load_save_scan_ptr,
-				* qlforth_text_buffer, system_directory[MAX_PATH], working_directory[MAX_PATH];
-static Symbol	* root_bucket[HASH_SIZE + 1], * forth_bucket[HASH_SIZE + 1],
-				** current, ** search_order[SEARCH_ORDER_SIZE + 1];
-static int		err_flag, qlforth_text_length, display_number_base = 10;
-static SSTNode  sst_buffer[SST_NODE_MAX + 1], * sst_hot_spot;
+				* ql4thvm_dict_top, * ql4thvm_dict, * ql4thvm_guard, * ql4thvm_here;
+static char		* scan_ptr,* text_ptr, * qlforth_text_buffer, interpret_text[TEXT_LINE_SIZE];
+static Symbol	* root_bucket[HASH_SIZE + 1], * forth_bucket[HASH_SIZE + 1], 
+				* working_bucket[HASH_SIZE + 1], ** current;
+static int		err_flag, ql4thvm_state, display_number_base = 10;
+static SSTNode  sst_buffer[SST_NODE_MAX + 1], *sst_current, * sst_hot_spot;
 static jmp_buf  e_buf;
 
-// ************************************************************************************
+static CONTROL_STACK cs_stack[MAX_CONTROL_STACK_DEEP + 1], *cs_ptr;
+static QLF_LITERAL	 token_value;
 
-static void display_symbole_table(Symbol * bucket[]) {
-	int idx, cnt;
-	Symbol * spc;
 
-	for (idx = 0; idx < HASH_SIZE; idx ++) {
-		if ((spc = bucket[idx]) != NULL) {
-			QLForth_printf("HASH : %d\n", idx) ;
-			cnt = 1;
-			do {
-				QLForth_printf("\t(%d) %s (DFA : 0x%08X)\n", cnt ++, spc->name, spc->dfa);
-				spc = spc->link;
-			} while (spc != NULL);
-		}
+// ************  Scanner functions , Text process *************************************
+
+static int is_space(int ch) {
+	return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
+static int forth_number(char * str) {
+	char	negate, base, *ptr, *end_dptr;
+
+	ptr = str;
+	negate = 0;
+	base = 10;
+	if (*ptr == '-') {
+		ptr++;
+		negate = -1;
 	}
+	if (*ptr == '%') {
+		ptr++;
+		base = 2;
+	}
+	else if (*ptr == '0' && (ptr[1] == 'x' || ptr[1] == 'X')) {
+		ptr += 2;
+		base = 16;
+	}
+	token_value.ival = strtoul(ptr, &end_dptr, base);
+
+	if (*end_dptr == '\0') {
+		if (negate) token_value.ival = -token_value.ival;
+		return -1;
+	}
+
+	token_value.fval = (float)strtod(ptr, &end_dptr);
+	if (*end_dptr != '\0') return 0;
+	if (negate)  token_value.fval = -token_value.fval;
+	return 1;
 }
 
-// ************************************************************************************
+static int forth_get_string(void) {
+	int idx, cc;
 
-static void cfp_listvocabulury(void) {
-	display_symbole_table(search_order[0]);
+	while (*scan_ptr != 0 && is_space(*scan_ptr)) {
+		scan_ptr++;
+	}
+	if (*scan_ptr == 0 || *scan_ptr != '\"') {
+		return 0;
+	}
+
+	idx = 0;
+	scan_ptr++;
+	while (*scan_ptr != 0 && (idx < (TEXT_LINE_SIZE - 2))) {
+		cc = *scan_ptr++;
+		if (cc == '\"') {
+			token_word[idx++] = 0;
+			return 1;
+		}
+		if (cc == '\\') {
+			switch (*scan_ptr++) {
+			case 'b': cc = '\b';	break;
+			case 'n': cc = '\n';	break;
+			case 'r': cc = '\r';	break;
+			case 't': cc = '\t';	break;
+			default:			    break;
+			}
+		}
+		token_word[idx++] = cc;
+	}
+	token_word[idx++] = 0;
+	return 0;
 }
+
+// ************  Symbol table management, part of has processing  *********************
 
 static unsigned int hash_bucket(unsigned char * name) {
-	unsigned int  h ;
+	unsigned int  h;
 
-	for (h = 0 ; * name ; h += * name ++) ;
-	return h  % HASH_SIZE ;
+	for (h = 0; *name; h += *name++);
+	return h  % HASH_SIZE;
 }
 
 static Symbol * qlforth_root_search(char * name) {
@@ -119,22 +155,16 @@ static Symbol * qlforth_root_search(char * name) {
 	return NULL;
 }
 
-static int is_space(int ch) {
-	return ch == ' ' || ch  == '\t' || ch == '\r' || ch == '\n';
-}
+// ************  Target forth support and interpreter help functions ******************
 
 static void qlforth_push(int val) {
-	*ql4thvm_dp++	= ql4thvm_tos;
-	ql4thvm_tos		= val;
+	*ql4thvm_dp++ = ql4thvm_tos;
+	ql4thvm_tos = val;
 }
 
 void qlforth_fp_docreate(void) {
-	* ql4thvm_dp ++ = ql4thvm_tos;
+	*ql4thvm_dp++ = ql4thvm_tos;
 	ql4thvm_tos = ThisExecuteWord->dfa;
-}
-
-static void fp_dovocabulary(void) {
-	search_order[0] = (Symbol **) ThisExecuteWord->dfa;
 }
 
 void * qlforth_alloc(int size_in_byte) {
@@ -145,141 +175,643 @@ void * qlforth_alloc(int size_in_byte) {
 		QLForth_error("Memory Full", NULL);
 	}
 	else {
-		pc	= (char *) ql4thvm_here;
+		pc = (char *)ql4thvm_here;
 		memset(pc, 0, (size_in_byte + 1)* (sizeof(QLF_CELL)));
 		ql4thvm_here += size_in_byte;
 	}
-	return (void *) pc;
+	return (void *)pc;
 }
 
-// ************************************************************************************
+static void debug_word(Symbol * spc) {
+	int cnt;
 
-static int forth_number(char * str) {
-	char	negate, base, * ptr, * end_dptr;
+	*ql4thvm_dp = ql4thvm_tos;
+	cnt = ql4thvm_dp - ql4thvm_stack;
 
-	ptr		= str;
-	negate	= 0;
-	base	= 10;
-	if (* ptr == '-')	{	
-		ptr ++;		
-		negate = -1;	
-	}
-	if (* ptr == '%')	{	
-		ptr ++;		
-		base = 2;		
-	} 
-	else if (* ptr == '0' && (ptr[1] == 'x' || ptr[1] == 'X')) { 
-		ptr += 2;	
-		base = 16;	
-	}
-	token_value.ival = strtoul(ptr, &end_dptr, base);
+	cnt = QLForth_chip_execute(spc->dfa, cnt, ql4thvm_stack);
 
-	if (* end_dptr == '\0') {
-        if (negate) token_value.ival = - token_value.ival;
-		return -1;
-	}
-
-	token_value.fval = (float) strtod(ptr, & end_dptr);
-    if (* end_dptr != '\0') return 0;
-    if (negate)  token_value.fval = - token_value.fval;
-	return 1;
+	ql4thvm_dp = &data_return_stack[cnt];
+	ql4thvm_tos = *ql4thvm_dp;
 }
 
-static int forth_get_string(void) {
-	int idx, cc;
+static void debug_variable(Symbol * spc) {
 
-	while (* scan_ptr != 0 && is_space(* scan_ptr)) {
-		scan_ptr ++;
-    }
-	if (* scan_ptr == 0 || * scan_ptr != '\"') {
-		return 0;
+}
+
+static void load_file_to_text(char * fname) {
+	FILE	* fd;
+	int		size;
+
+	qlforth_text_buffer = NULL;
+	if ((fd = fopen(fname, "rb")) == NULL) {
+		QLForth_printf("Can not open file : %s\n", fname);
 	}
-
-	idx = 0;
-	scan_ptr ++;
-	while (* scan_ptr != 0 && (idx < (TEXT_LINE_SIZE - 2))) {
-		cc = * scan_ptr ++;
-		if (cc == '\"') {
-			token_word[idx ++] = 0;
-			return 1;
+	else {
+		fseek(fd, 0L, SEEK_END);
+		size = ftell(fd);
+		fseek(fd, 0L, SEEK_SET);
+		if ((qlforth_text_buffer = (char *)malloc(size + 4)) == NULL) {
+			QLForth_printf("Out of Memory.");
+			fclose(fd);
 		}
-		if (cc == '\\') {
-			switch(* scan_ptr ++) {
-				case 'b': cc = '\b';	break ;
-                case 'n': cc = '\n';	break ;
-                case 'r': cc = '\r';	break ;
-                case 't': cc = '\t';	break ;
-				default:			    break;
-			}
+		else {
+			size = fread(qlforth_text_buffer, 1, size, fd);
+			fclose(fd);
+			*(qlforth_text_buffer + size) = 0;
+			*(qlforth_text_buffer + size + 1) = 0;
 		}
-		token_word[idx ++] = cc;
 	}
-	token_word[idx ++] = 0;
-	return 0;
 }
 
-// ************************************************************************************
-
-static void forth_only(void) {
-	int idx;
-
-	for (idx = 0 ; idx < SEARCH_ORDER_SIZE; idx ++) {
-		search_order[idx] = NULL;
-	}
-	search_order[0] = search_order[1] = root_bucket;
-}
-
-static void forth_forth(void) {
-	search_order[0] = forth_bucket;
-}
-
-static void cfp_vocabulary(void) {
-	QLF_CELL	i;
+static void display_symbole_table(Symbol * bucket[]) {
+	int idx, cnt;
 	Symbol * spc;
 
-	if (!QLForth_token()) {
-		QLForth_error("Expect a word", NULL);
-	}
-
-	if ((spc = QLForth_symbol_add(token_word)) == NULL) {
-		return;
-	}
-	
-	spc->type	= QLF_TYPE_PRIMITIVE;
-	spc->fun	= fp_dovocabulary;
-	i = hash_bucket((unsigned char *)token_word);
-	spc->link	= root_bucket[i];
-	current[i]	= spc;
-	i			= sizeof(root_bucket);
-	spc->dfa	= (int) qlforth_alloc(i);
-}
-
-static void cfp_definitions(void) {
-	current = search_order[0] ;
-}
-
-static void cfp_also(void) {
-	int idx;
-
-	for (idx = SEARCH_ORDER_SIZE; idx > 0 ; idx --) {
-		search_order[idx] = search_order[idx - 1];
+	for (idx = 0; idx < HASH_SIZE; idx++) {
+		if ((spc = bucket[idx]) != NULL) {
+			QLForth_printf("HASH : %d\n", idx);
+			cnt = 1;
+			do {
+				QLForth_printf("\t(%d) %s (DFA : 0x%08X)\n", cnt++, spc->name, spc->dfa);
+				spc = spc->link;
+			} while (spc != NULL);
+		}
 	}
 }
 
-static void cfp_previous(void) {
-	int idx;
+static void qlforth_interactive(void) {
+	Symbol * spc;
 
-	for (idx = 0; idx < SEARCH_ORDER_SIZE; idx ++) {
-		search_order[idx] = search_order[idx + 1];
+	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
+		switch (spc->type) {
+		case QLF_TYPE_COMMAND:		spc->fun();					break;
+		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+		case QLF_TYPE_WORD:			debug_word(spc);			break;
+		case QLF_TYPE_VARIABLE:		debug_variable(spc);		break;
+		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+		case QLF_TYPE_COMPILE:
+			if ((spc = qlforth_root_search(token_word)) != NULL) {
+				if (spc->type == QLF_TYPE_PRIMITIVE) {
+					spc->fun();									break;
+				}
+			}
+			// fall into
+		default:
+			QLForth_error("Word - %s - cannot be used in INTERACTIVE mode", token_word);
+			break;
+		}
+	}
+	else if (forth_number(token_word)) {
+		qlforth_push(token_value.ival);
+	}
+	else {
+		QLForth_error("\'%s\' : word not found.[1]", token_word);
 	}
 }
- 
-// ************************************************************************************
 
-static void forth_clear(void) {
-	ql4thvm_stack		= ql4thvm_dp	= & data_return_stack[0]; 
-	ql4thvm_stack_top	= ql4thvm_rp	= & data_return_stack[STACK_DEEP_SIZE - 1];
+static void qlforth_interpret(void) {
+	Symbol * spc;
+
+	if ((spc = qlforth_root_search(token_word)) == NULL) {
+		spc = QLForth_symbol_search(token_word);
+	}
+	if (spc != NULL) {
+		switch (spc->type) {
+		case QLF_TYPE_COMMAND:		spc->fun();					break;
+		case QLF_TYPE_DEFINE:		spc->fun();					break;
+		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+		default:
+			QLForth_error("Word - %s - cannot be used in INTERPRET mode", token_word);
+			break;
+		}
+	}
+	else if (forth_number(token_word)) {
+		qlforth_push(token_value.ival);
+	}
+	else {
+		QLForth_error("\'%s\' : word not found.[2]", token_word);
+	}
 }
+
+static void qlforth_compile(void) {
+	Symbol * spc;
+
+	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
+		switch (spc->type) {
+		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+		case QLF_TYPE_COMPILE:		spc->fun();					break;
+		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+		case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (int)spc); break;
+		case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF, (int)spc);	break;
+		default:
+			QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
+			break;
+
+		}
+	}
+	else if (forth_number(token_word)) {
+		qlforth_push(token_value.ival);
+	}
+	else {
+		QLForth_error("\'%s\' : word not found. [3]", token_word);
+	}
+}
+
+static void ql4th_interpreter(char * text) {
+	scan_ptr = text_ptr = text;
+
+	if (setjmp(e_buf) == 0) {
+		while (QLForth_token() != 0) {
+			_strupr(token_word);
+			switch (ql4thvm_state) {
+			case QLF_STATE_INTERACTIVE: qlforth_interactive();					break;
+			case QLF_STATE_INTERPRET:	qlforth_interpret();					break;
+			case QLF_STATE_COMPILE:		qlforth_compile();						break;
+			}
+		}
+
+		if (ql4thvm_state != QLF_STATE_INTERPRET && ql4thvm_state != QLF_STATE_INTERACTIVE) {
+			QLForth_error("Unexpect END-OF-File", NULL);
+		}
+	}
+}
+
+// ************  Primitive, execution only on host like macro *************************
+
+static void cfp_dup(void) {
+	*ql4thvm_dp++ = ql4thvm_tos;
+}
+
+static void cfp_qdup(void) {
+	if (ql4thvm_tos) {
+		*ql4thvm_dp++ = ql4thvm_tos;
+	}
+}
+
+static void cfp_drop(void) {
+	ql4thvm_tos = *(--ql4thvm_dp);
+}
+
+static void cfp_over(void) {
+	*ql4thvm_dp++ = ql4thvm_tos;
+	ql4thvm_tos = *(ql4thvm_dp - 2);
+}
+
+static void cfp_swap(void) {
+	QLF_CELL tmp;
+
+	tmp = *(ql4thvm_dp - 1);
+	*(ql4thvm_dp - 1) = ql4thvm_tos;
+	ql4thvm_tos = tmp;
+}
+
+static void cfp_rot(void) {
+	QLF_CELL tmp;
+
+	tmp = ql4thvm_tos;
+	ql4thvm_tos = *(ql4thvm_dp - 2);
+	*(ql4thvm_dp - 2) = *(ql4thvm_dp - 1);
+	*(ql4thvm_dp - 1) = tmp;
+}
+
+static void cfp_mrot(void) {
+	QLF_CELL tmp;
+
+	tmp = ql4thvm_tos;
+	ql4thvm_tos = *(ql4thvm_dp - 1);
+	*(ql4thvm_dp - 1) = *(ql4thvm_dp - 2);
+	*(ql4thvm_dp - 2) = tmp;
+}
+
+static void cfp_pick(void) {
+	if (&ql4thvm_stack[ql4thvm_tos] < ql4thvm_dp) {
+		ql4thvm_tos = *(ql4thvm_dp - ql4thvm_tos - 1);
+	}
+}
+
+static void cfp_roll(void) {
+	QLF_CELL * ptr;
+
+	if (&ql4thvm_stack[ql4thvm_tos] < ql4thvm_dp) {
+		ptr = ql4thvm_dp - ql4thvm_tos - 1;
+		ql4thvm_tos = *ptr;
+		for (; ptr < ql4thvm_dp; ptr++) {
+			*ptr = *(ptr + 1);
+		}
+		ql4thvm_dp--;
+	}
+}
+
+static void cfp_to_r(void) {
+	*ql4thvm_rp-- = ql4thvm_tos;
+	ql4thvm_tos = *(--ql4thvm_dp);
+}
+
+static void cfp_r_fetch(void) {
+	*ql4thvm_dp++ = ql4thvm_tos;
+	ql4thvm_tos = *(ql4thvm_rp + 1);
+}
+
+static void cfp_from_r(void) {
+	*ql4thvm_dp++ = ql4thvm_tos;
+	ql4thvm_tos = *(++ql4thvm_rp);
+}
+
+static void cfp_depth(void) {
+	*ql4thvm_dp++ = ql4thvm_tos;
+	ql4thvm_tos = (ql4thvm_dp - &ql4thvm_stack[1]);
+}
+
+// ....................................................................................
+
+static void cfp_plus(void) {
+	ql4thvm_tos += *(--ql4thvm_dp);
+}
+
+static void cfp_minus(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = nos - ql4thvm_tos;
+}
+
+static void cfp_mul(void) {
+	ql4thvm_tos *= *(--ql4thvm_dp);
+}
+
+static void cfp_div(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = nos / ql4thvm_tos;
+}
+
+static void cfp_mod(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = nos % ql4thvm_tos;
+}
+
+static void cfp_divmod(void) {
+	QLF_CELL nos, quot;
+
+	if (ql4thvm_tos != 0) {
+		nos = *(ql4thvm_dp - 1);
+		quot = nos / ql4thvm_tos;
+		*(ql4thvm_dp - 1) = nos % ql4thvm_tos;
+		ql4thvm_tos = quot;
+	}
+}
+
+static void cfp_1_add(void) {
+	ql4thvm_tos++;
+}
+
+static void cfp_1_sub(void) {
+	ql4thvm_tos--;
+}
+
+static void cfp_2_add(void) {
+	ql4thvm_tos += 2;
+}
+
+static void cfp_2_sub(void) {
+	ql4thvm_tos -= 2;
+}
+
+static void cfp_2_mul(void) {
+	ql4thvm_tos <<= 1;
+}
+
+static void cfp_2_div(void) {
+	ql4thvm_tos >>= 1;
+}
+
+static void cfp_4_add(void) {
+	ql4thvm_tos += 4;
+}
+
+static void cfp_4_sub(void) {
+	ql4thvm_tos -= 4;
+}
+
+static void cfp_min(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos < ql4thvm_tos) ? nos : ql4thvm_tos;
+}
+
+static void cfp_max(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos > ql4thvm_tos) ? nos : ql4thvm_tos;
+}
+
+static void cfp_abs(void) {
+	ql4thvm_tos = (ql4thvm_tos >= 0) ? ql4thvm_tos : (-ql4thvm_tos);
+}
+
+static void cfp_negate(void) {
+	ql4thvm_tos = -ql4thvm_tos;
+}
+
+// ....................................................................................
+
+static void cfp_cmp_lt(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos < ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_le(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos <= ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_ne(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos != ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_eq(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos == ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_gt(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos > ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_ge(void) {
+	QLF_CELL nos;
+
+	nos = *(--ql4thvm_dp);
+	ql4thvm_tos = (nos >= ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_0_lt(void) {
+	ql4thvm_tos = (ql4thvm_tos < 0) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_0_eq(void) {
+	ql4thvm_tos = (ql4thvm_tos == 0) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_cmp_0_gt(void) {
+	ql4thvm_tos = (ql4thvm_tos > 0) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_and(void) {
+	ql4thvm_tos &= *(--ql4thvm_dp);
+}
+
+static void cfp_or(void) {
+	ql4thvm_tos |= *(--ql4thvm_dp);
+}
+
+static void cfp_xor(void) {
+	ql4thvm_tos ^= *(--ql4thvm_dp);
+}
+
+static void cfp_not(void) {
+	ql4thvm_tos = ~ql4thvm_tos;
+}
+
+static void cfp_store(void) {
+	*(QLF_CELL *)ql4thvm_tos = *(--ql4thvm_dp);
+	ql4thvm_tos = *(--ql4thvm_dp);
+}
+
+static void cfp_fetch(void) {
+
+	ql4thvm_tos = *(QLF_CELL *)ql4thvm_tos;
+}
+
+static void cfp_comma(void) {
+	*ql4thvm_here++ = ql4thvm_tos;
+	ql4thvm_tos = *(--ql4thvm_dp);
+}
+
+static void cfp_f_plus(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval += *(QLF_REAL *)(--ql4thvm_dp);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_minus(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (*(QLF_REAL *)(--ql4thvm_dp)) - data.fval;
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_mul(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval *= *(QLF_REAL *)(--ql4thvm_dp);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_div(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (*(QLF_REAL *)(--ql4thvm_dp)) / data.fval;
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_lt(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	ql4thvm_tos = (data.fval < (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_f_le(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	ql4thvm_tos = (data.fval <= (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_f_ne(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	ql4thvm_tos = (data.fval != (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_f_eq(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	ql4thvm_tos = (data.fval == (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_f_gt(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	ql4thvm_tos = (data.fval > (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_f_ge(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	ql4thvm_tos = (data.fval >= (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
+}
+
+static void cfp_f_abs(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (data.fval >= 0.0) ? data.fval : (-data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_acos(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)acos((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_asin(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)asin((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_atan(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)acos((double)data.fval); ;
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_atan2(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)atan2((double)(*(QLF_REAL *)(--ql4thvm_dp)), (double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_cos(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)cos((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_exp(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)exp((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_float(void) {
+}
+
+static void cfp_f_log(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)log((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_log10(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)log10((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_max(void) {
+	QLF_LITERAL a, b;
+
+	a.ival = ql4thvm_tos;
+	b.ival = *(--ql4thvm_dp);
+	ql4thvm_tos = (a.fval > b.fval) ? a.ival : b.ival;
+}
+
+static void cfp_f_min(void) {
+	QLF_LITERAL a, b;
+
+	a.ival = ql4thvm_tos;
+	b.ival = *(--ql4thvm_dp);
+	ql4thvm_tos = (a.fval < b.fval) ? a.ival : b.ival;
+}
+
+static void cfp_f_negate(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = -(data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_pow(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)pow((double)(*(QLF_REAL *)(--ql4thvm_dp)), (double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_sin(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)sin((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_sqrt(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)sqrt((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+static void cfp_f_tan(void) {
+	QLF_LITERAL data;
+
+	data.ival = ql4thvm_tos;
+	data.fval = (QLF_REAL)tan((double)data.fval);
+	ql4thvm_tos = data.ival;
+}
+
+// ************  CONSTANT, WORD, COLON, Complier words ********************************
 
 static void fp_doconst(void) {
 	* ql4thvm_dp ++ = ql4thvm_tos;
@@ -303,46 +835,204 @@ static void cfp_constant(void) {
 	ql4thvm_tos = * (-- ql4thvm_dp);
 }
 
-static void cfp_load(void) {
-	FILE * fd;
-	int  size;
-	char file_path[MAX_PATH];
-
-	if (!forth_get_string()) {
-		QLForth_error("Expect a string as the file name for LOAD", NULL);
-	}
-	if (load_text == NULL || load_save_scan_ptr != NULL) {
-		QLForth_error("Load nested.", NULL);
+static void cfp_colon(void) {
+	if (!QLForth_token()) {
+		QLForth_error("Expect a word", NULL);
 	}
 
-	sprintf(file_path, "%s\\%s.qlf", working_directory, token_word);
-	if ((fd = fopen(file_path, "r")) == NULL) {
-		// try to open as a library file
-		sprintf(file_path, "%s\\%s.qlf", system_directory, token_word);
-		if ((fd = fopen(file_path, "r")) == NULL) {
-	        QLForth_error("Load file not found", token_word) ;
-		}
+	if ((ThisCreateWord = QLForth_symbol_add(token_word)) == NULL) {
+		return;
 	}
-
-	// read this source file
-	fseek(fd, 0L, SEEK_END);
-	size = ftell(fd);
-	fseek(fd, 0L, SEEK_SET);
-	if ((load_text = malloc(size + 16)) == NULL) {
-		QLForth_error("Out of memory", NULL) ;
-	}
-	size = fread(load_text, 1, size, fd);
-	fclose(fd);   
-
-	// processing this source file 
-	* (load_text + size) = 0;
-	* (load_text + size + 1) = 0;
-	load_save_scan_ptr	= scan_ptr;
-	scan_ptr			= load_text;
+	ThisCreateWord->type = QLF_TYPE_WORD;
+	ThisCreateWord->dfa = 0;
+	ThisCreateWord->hidden = 1;
+	ThisCreateWord->sst = QLForth_sst_append(SST_COLON, (int)ThisCreateWord);
+	cs_ptr = &cs_stack[0];
+	cs_ptr->id		= CSID_COLON;
+	ql4thvm_state	= QLF_STATE_COMPILE;
+	cs_ptr++;
 }
 
-static void cfp_core(void) {
+static void cfp_semicolon(void) {
+	cs_ptr--;
+	if ((cs_ptr != &cs_stack[0]) || (cs_ptr->id != CSID_COLON)) {
+		QLForth_error("Syntax structure mismatched or in-completely", NULL);
+	}
+	cs_ptr--;
+
+	if (ql4thvm_state != QLF_STATE_COMPILE) {
+		QLForth_error("State changed during word compilation", NULL);
+	}
+	QLForth_sst_append(SST_RET, 0);
+	QLForth_sst_append(SST_SEMICOLON, 0);
+	ql4thvm_state = QLF_STATE_INTERPRET;
+
+	ThisCreateWord->hidden = 0;
+	ThisCreateWord = NULL;
+}
+
+static void cfp_variable(void) {
+	Symbol	* spc;
+	SSTNode * sst;
+
+	if (!QLForth_token()) {
+		QLForth_error("Expect a word", NULL);
+	}
+
+	if ((spc = QLForth_symbol_add(token_word)) == NULL) {
+		return;
+	}
+	spc->type = QLF_TYPE_VARIABLE;
+	sst = QLForth_sst_append(SST_VARIABLE, (int)spc);
+	spc->dfa = 0;
+	spc->type = QLF_TYPE_PRIMITIVE;
+	spc->fun = qlforth_fp_docreate;
+	spc->dfa = (QLF_CELL)ql4thvm_here;
+	ql4thvm_here++;
+}
+
+static void cfp_if(void) {
+	cs_ptr++;
+	cs_ptr->id = CSID_IF;
+	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, 0);
+}
+
+static void cfp_else(void) {
+	SSTNode * sst;
+
+	if (cs_ptr->id != CSID_IF) {
+		QLForth_error("No IF for this ELSE", NULL);
+	}
+	sst = QLForth_sst_append(SST_BRANCH, 0);
+	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, 0);
+	cs_ptr->sst = sst;
+}
+
+static void cfp_endif(void) {
+	if (cs_ptr->id != CSID_IF) {
+		QLForth_error("No IF for this THEN/ENDIF", NULL);
+	}
+	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, 0);
+	cs_ptr--;
+}
+
+static void cfp_begin(void) {
+	cs_ptr++;
+	cs_ptr->id = CSID_BEGIN;
+	cs_ptr->sst = QLForth_sst_append(SST_LABEL, 0);
+	cs_ptr->pos = ql4thvm_here;
+}
+
+static void cfp_while(void) {
+	if (cs_ptr->id != CSID_BEGIN) {
+		QLForth_error("No BEGIN for this WHILE", NULL);
+	}
+	cs_ptr++;
+	cs_ptr->id = CSID_WHILE;
+	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, 0);
+}
+
+static void cfp_repeat(void) {
+	SSTNode * sst;
+
+	if (cs_ptr->id != CSID_WHILE) {
+		QLForth_error("No WHILE for this REPEAT", NULL);
+	}
+	sst = QLForth_sst_append(SST_BRANCH, 0);
+	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, 0);
+	cs_ptr--;
+	sst->sst = cs_ptr->sst;
+	cs_ptr--;
+}
+
+static void cfp_until(void) {
+	if (cs_ptr->id != CSID_BEGIN) {
+		QLForth_error("No WHILE for this UNTIL", NULL);
+	}
+	QLForth_sst_append(SST_0_BRANCH, (int)cs_ptr->sst);
+	cs_ptr--;
+}
+
+static void cfp_do(void) {
+	cs_ptr++;
+	cs_ptr->id = CSID_DO;
+	cs_ptr->sst = QLForth_sst_append(SST_DO, 0);
+}
+
+static void cfp_loop(void) {
+	if (cs_ptr->id != CSID_DO) {
+		QLForth_error("No DO matched this LOOP", NULL);
+	}
+	QLForth_sst_append(SST_LOOP, (int)cs_ptr->sst);
+	cs_ptr--;
+}
+
+static void cfp_leave(void) {
+
+	CONTROL_STACK * csp;
+
+	for (csp = cs_ptr; csp->id != SST_COLON && csp > cs_stack; csp--) {
+		if (csp->id == CSID_DO) {
+			break;
+		}
+	}
+	if (csp->id == SST_COLON || csp == cs_stack) {
+		QLForth_error("No DO or FOR matched this EXIT", NULL);
+	}
+	QLForth_sst_append(SST_LEAVE, (int)csp->sst);
+}
+
+static void cfp_for(void) {
+	cs_ptr++;
+	cs_ptr->id = CSID_FOR;
+	cs_ptr->sst = QLForth_sst_append(SST_FOR, 0);
+	cs_ptr->pos = ql4thvm_here;
+}
+
+static void cfp_next(void) {
+
+	if (cs_ptr->id != CSID_FOR) {
+		QLForth_error("No FOR  with this NEXT", NULL);
+	}
+	QLForth_sst_append(SST_NEXT, (int)cs_ptr->sst);
+	cs_ptr--;
+}
+
+static void cfp_tick(void) {
+	Symbol * spc;
+
+	if (!QLForth_token()) {
+		QLForth_error("Expect a word", NULL);
+	}
+	_strupr(token_word);
+	if ((spc = QLForth_symbol_search(token_word)) == NULL) {
+		QLForth_error("Word not found", token_word);
+	}
+}
+
+static void cfp_sharp(void) {
+	QLForth_sst_append(SST_LITERAL, ql4thvm_tos);
 	ql4thvm_tos = *(--ql4thvm_dp);
+}
+
+static void cfp_allot(void) {
+	QLForth_sst_append(SST_ALLOT, ql4thvm_tos);
+	ql4thvm_tos = *(--ql4thvm_dp);
+}
+
+// ************  Forth Command for developers *****************************************
+
+static void forth_clear(void) {
+	ql4thvm_stack = ql4thvm_dp = &data_return_stack[0];
+	ql4thvm_stack_top = ql4thvm_rp = &data_return_stack[STACK_DEEP_SIZE - 1];
+}
+
+static void forth_make(void) {
+
+}
+
+static void forth_quit(void) {
+    exit(0);
 }
 
 static void cfp_dot_s(void) {
@@ -376,16 +1066,11 @@ static void cfp_see(void) {
 	}
 }
 
-// ************************************************************************************
+// ************  Primitive entry table  ***********************************************
 
 static Primitive command_table[] = {
-	{ "ONLY",				forth_only			},
-	{ "FORTH",				forth_forth			},
-	{ "DEFINITIONS",		cfp_definitions		},
-	{ "ALSO",				cfp_also			},
-	{ "PREVIOUS",			cfp_previous		},
-	{ "LOAD",				cfp_load			},
-	{ "CORE",				cfp_core			},
+	{ "MAKE",				forth_make			},
+    { "QUIT",               forth_quit          },
 
 	{ ".S",					cfp_dot_s			},
 	{ "SEE",				cfp_see				},
@@ -396,174 +1081,124 @@ static Primitive command_table[] = {
 
 static Primitive define_table[] = {
 	{ "CONSTANT",			cfp_constant		},
-	{ "VOCABULARY",			cfp_vocabulary		},
+	{ ":",					cfp_colon			},
+	{ "VARIABLE",			cfp_variable		},
 	
 	{ NULL,					NULL				}
 
 } ;
 
-// ************************************************************************************
+static Primitive immediate_table[] = {
+	{ ";",				cfp_semicolon },
+	{ "\'",				cfp_tick },
+	{ "#",				cfp_sharp },
+	{ "ALLOT",			cfp_allot },
 
-static void debug_word(Symbol * spc) {
-	int cnt; 
+	{ "IF",				cfp_if },
+	{ "ELSE",			cfp_else },
+	{ "ENDIF",			cfp_endif },
+	{ "THEN",			cfp_endif },
+	{ "BEGIN",			cfp_begin },
+	{ "WHILE",			cfp_while },
+	{ "REPEAT",			cfp_repeat },
+	{ "UNTIL",			cfp_until },
+	{ "DO",				cfp_do },
+	{ "LOOP",			cfp_loop },
+	{ "LEAVE",			cfp_leave },
+	{ "FOR",			cfp_for },
+	{ "NEXT",			cfp_next },
 
-	* ql4thvm_dp = ql4thvm_tos;
-	cnt			 = ql4thvm_dp - ql4thvm_stack;
+	{ NULL,			NULL }
+};
 
-	cnt = QLForth_chip_execute(spc->dfa, cnt, ql4thvm_stack);
+static Primitive primitive_table[] = {
+	{ "DROP",			cfp_drop	},
+	{ "DUP",			cfp_dup		},
+	{ "?DUP",			cfp_qdup	},
+	{ "OVER",			cfp_over	},
+	{ "SWAP",			cfp_swap	},
+	{ "ROT",			cfp_rot		},
+	{ "-ROT",			cfp_mrot	},
+	{ "PICK",			cfp_pick	},
+	{ "ROLL",			cfp_roll	},
 
-	ql4thvm_dp  = &data_return_stack[cnt];
-	ql4thvm_tos = * ql4thvm_dp;
-}
+	//	{ ">R",				cfp_to_r	},
+	//	{ "R@",				cfp_r_fetch },
+	//	{ "R>",				cfp_from_r	},
 
-static void debug_variable(Symbol * spc) {
+	{ "DEPTH",			cfp_depth	},
 
-}
+	{ "+",				cfp_plus	},
+	{ "-",				cfp_minus	},
+	{ "*",				cfp_mul		},
+	{ "/",				cfp_div		},
+	{ "MOD",			cfp_mod		},
+	{ "/MOD",			cfp_divmod	},
+	{ "1+",				cfp_1_add	},
+	{ "1-",				cfp_1_sub	},
+	{ "2+",				cfp_2_add	},
+	{ "2-",				cfp_2_sub	},
+	{ "2*",				cfp_2_mul	},
+	{ "2/",				cfp_2_div	},
+	{ "4+",				cfp_4_add	},
+	{ "4-",				cfp_4_sub	},
 
-static void forth_forget(void) {
-	int idx, subidx;
-	Symbol * spc, * subspc, ** vpc;
+	{ "MIN",			cfp_min		},
+	{ "MAX",			cfp_max		},
+	{ "ABS",			cfp_abs		},
+	{ "NEGATE",			cfp_negate	},
 
-	QLForth_printf("Enter FORGET\n");
-	forth_clear();
-	ql4thvm_here = ql4thvm_guard;	
-	for (idx = 0; idx < HASH_SIZE ; idx ++) {
-		spc = root_bucket[idx];
-		while ((void *) spc >= (void *) ql4thvm_here) {
-			QLForth_printf("Delete Symbol : %s\n", spc->name);
-			spc = spc->link;
-		}
-		root_bucket[idx]= spc;
-		while (spc != NULL) {
-			if (spc->fun == fp_dovocabulary) {
-				QLForth_printf("Enter Vocabulary : %s\n", spc->name);
-				vpc = (Symbol **) spc->dfa;
-				for (subidx = 0; subidx < HASH_SIZE; subidx ++) {
-					subspc = * (vpc + subidx);
-					while ((void *) subspc >= (void *) ql4thvm_here) {
-						QLForth_printf(" -- Delete Symbol : %s\n", subspc->name);
-						subspc = subspc->link;
-					}
-	    			* (vpc + subidx) = subspc;
-				}
-			}
-			spc = spc->link;
-		}
-	}
-}
+	{ "<",				cfp_cmp_lt	},
+	{ "<=",				cfp_cmp_le	},
+	{ "<>",				cfp_cmp_ne	},
+	{ "=",				cfp_cmp_eq	},
+	{ ">",				cfp_cmp_gt	},
+	{ ">=",				cfp_cmp_ge	},
+	{ "0<",				cfp_cmp_0_lt},
+	{ "0=",				cfp_cmp_0_eq},
+	{ "0>",				cfp_cmp_0_gt},
 
-static void qlforth_init(void) {
-	Primitive * ppc;
-	Symbol	* spc;
+	{ "AND",			cfp_and		},
+	{ "OR",				cfp_or		},
+	{ "XOR",			cfp_xor		},
+	{ "NOT",			cfp_not		},
 
-	ql4thvm_dict = ql4thvm_here = &dict_buffer[0];
-	ql4thvm_dict_top = &dict_buffer[DICT_BUFFER_SIZE];
-	memset(dict_buffer, 0, sizeof(dict_buffer));
-	memset(root_bucket, 0, sizeof(root_bucket));
-	memset(forth_bucket, 0, sizeof(forth_bucket));
+	//	{ "!",				cfp_store	},
+	//	{ "@",				cfp_fetch	},
+	//	{ ",",				cfp_comma	},
 
-	forth_only();
-	current = root_bucket;
+	{ "F+",				cfp_f_plus	},
+	{ "F-",				cfp_f_minus },
+	{ "F*",				cfp_f_mul	},
+	{ "F/",				cfp_f_div	},
+	{ "F<",				cfp_f_lt	},
+	{ "F<=",			cfp_f_le	},
+	{ "F<>",			cfp_f_ne	},
+	{ "F=",				cfp_f_eq	},
+	{ "F>",				cfp_f_gt	},
+	{ "F>=",			cfp_f_ge	},
+	{ "FABS",			cfp_f_abs	},
+	{ "ACOS",			cfp_f_acos	},
+	{ "ASIN",			cfp_f_asin	},
+	{ "ATAN",			cfp_f_atan	},
+	{ "ATAN2",			cfp_f_atan2 },
+	{ "COS",			cfp_f_cos	},
+	{ "EXP",			cfp_f_exp	},
+	{ "FLOAT",			cfp_f_float },
+	{ "LOG",			cfp_f_log	},
+	{ "LOG10",			cfp_f_log10 },
+	{ "FMAX",			cfp_f_max	},
+	{ "FMIN",			cfp_f_min	},
+	{ "FNEGATE",		cfp_f_negate},
+	{ "POW",			cfp_f_pow	},
+	{ "SIN",			cfp_f_sin	},
+	{ "SQRT",			cfp_f_sqrt	},
+	{ "TAN",			cfp_f_tan	},
 
-	for (ppc = command_table; ppc->pname != NULL; ppc++) {
-		spc = QLForth_symbol_add(ppc->pname);
-		spc->fun = ppc->fun;
-		spc->type = QLF_TYPE_COMMAND;
-	}
+	{ NULL,				NULL }
+};
 
-	for (ppc = define_table; ppc->pname != NULL; ppc++) {
-		spc = QLForth_symbol_add(ppc->pname);
-		spc->fun = ppc->fun;
-		spc->type = QLF_TYPE_DEFINE;
-	}
-
-	Primitive_init();
-	Forth_init();
-
-	current = forth_bucket;
-	Compile_init();
-
-	current = root_bucket;
-	forth_clear();
-	search_order[0] = search_order[1] = root_bucket;
-	search_order[0] = current = forth_bucket;
-	sst_hot_spot	= sst_current = &sst_buffer[0];
-	ql4thvm_state	= QLF_STATE_INTERACTIVE;
-}
-
-static void qlforth_interactive(void) {
-	Symbol * spc;
-
-	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
-		switch (spc->type) {
-			case QLF_TYPE_COMMAND:		spc->fun();					break;
-			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-			case QLF_TYPE_WORD:			debug_word(spc);			break;
-			case QLF_TYPE_VARIABLE:		debug_variable(spc);		break;
-			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-			default:	
-				QLForth_error("Word - %s - cannot be used in INTERACTIVE mode", token_word);	
-				break;
-		}
-	}
-	else if (forth_number(token_word)) {
-		qlforth_push(token_value.ival);
-	}
-	else {
-		QLForth_error("\'%s\' : word not found.[1]", token_word);
-	}
-}
-
-static void qlforth_interpret(void) {
-	Symbol * spc;
-
-	if ((spc = qlforth_root_search(token_word)) != NULL) {
-		spc = QLForth_symbol_search(token_word);
-	}
-	if (spc != NULL) {
-		switch (spc->type) {
-			case QLF_TYPE_COMMAND:		spc->fun();					break;
-			case QLF_TYPE_DEFINE:		spc->fun();					break;
-			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-			default:					
-				QLForth_error("Word - %s - cannot be used in INTERPRET mode", token_word);
-				break;
-		}
-	}
-	else if (forth_number(token_word)) {
-		qlforth_push(token_value.ival);
-	}
-	else {
-		QLForth_error("\'%s\' : word not found.[2]", token_word);
-	}
-}
-
-static void qlforth_compile(void) {
-	Symbol * spc;
-
-	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
-		switch (spc->type) {
-			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-			case QLF_TYPE_COMPILE:		spc->fun();					break;
-			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-			case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (int)spc); break;
-			case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF, (int)spc);	break;
-			default:	
-				QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
-				break;
-
-		}
-	}
-	else if (forth_number(token_word)) {
-		qlforth_push(token_value.ival);
-	}
-	else {
-		QLForth_error("\'%s\' : word not found. [3]", token_word);
-	}
-}
-
-// ************************************************************************************
+// ************  Internal Shared Functions ********************************************
 
 void QLForth_error(char * msg, char * tk) {
 	char buffer[256], * pc;
@@ -623,6 +1258,7 @@ int QLForth_token(void) {
 }
 
 Symbol * QLForth_symbol_search(char * name) {
+	static Symbol ** search_order[] = { working_bucket, forth_bucket, root_bucket, NULL };
 	Symbol * spc, *** vpc;
 	int		h;
 
@@ -650,7 +1286,6 @@ Symbol * QLForth_symbol_add(char * name) {
 	i	= hash_bucket((unsigned char *)name);
 	spc->link = current[i];
 	current[i] = spc;
-	// QLForth_printf("Add to symbol table : %s (%d)\n", name, i);
 	return spc;
 }
 
@@ -666,99 +1301,80 @@ SSTNode * QLForth_sst_append(int type, int val) {
 	return ptr;
 }
 
-// ************************************************************************************
+// ************  QLForth Interface ****************************************************
 
-void QLForth_init(char * w_path) {
-	if (w_path != NULL) {
-		strcpy(system_directory, w_path);
+void QLForth_init(char * fname) {
+	Primitive	* ppc;
+	Symbol		* spc;
+
+	ql4thvm_dict = ql4thvm_here = &dict_buffer[0];
+	ql4thvm_dict_top = &dict_buffer[DICT_BUFFER_SIZE];
+	memset(dict_buffer,		0, sizeof(dict_buffer));
+	memset(root_bucket,		0, sizeof(root_bucket));
+	memset(forth_bucket,	0, sizeof(forth_bucket));
+	memset(working_bucket,	0, sizeof(working_bucket));
+
+	current = root_bucket;
+	for (ppc = command_table; ppc->pname != NULL; ppc++) {
+		spc = QLForth_symbol_add(ppc->pname);
+		spc->fun = ppc->fun;
+		spc->type = QLF_TYPE_COMMAND;
 	}
 
-	qlforth_init();
-	if (qlforth_text_buffer = malloc(TEXT_BUFFER_STEP)) {
-		qlforth_text_length = TEXT_BUFFER_STEP;
-	}
-}
-
-char * QLForth_preparation(int size, char * w_file) {
-	int cnt;
-
-	for (cnt = 0; ql4thvm_running && cnt < 10; cnt++) {
-		ql4thvm_force_break = 0xff;
-		Sleep(100);
+	for (ppc = define_table; ppc->pname != NULL; ppc++) {
+		spc = QLForth_symbol_add(ppc->pname);
+		spc->fun = ppc->fun;
+		spc->type = QLF_TYPE_DEFINE;
 	}
 
-	if (size == 0) {
-		ql4thvm_state = QLF_STATE_INTERACTIVE;
+	for (ppc = immediate_table; ppc->pname != NULL; ppc++) {
+		spc = QLForth_symbol_add(ppc->pname);
+		spc->fun = ppc->fun;
+		spc->type = QLF_TYPE_COMPILE;
 	}
-	else {
-		if (w_file != NULL) {
-			strcpy(working_directory, w_file);
-			qlforth_init();
-			Code_init();
-			ql4thvm_guard = NULL;
-		}
-		else {
-			forth_forget();
-			sst_current	  = sst_hot_spot;
-		}
 
-		if (size > qlforth_text_length) {
-			free(qlforth_text_buffer);
-			qlforth_text_length = size + TEXT_BUFFER_STEP;
-			qlforth_text_buffer = malloc(size + TEXT_BUFFER_STEP);
-		}
+	for (ppc = primitive_table; ppc->pname != NULL; ppc++) {
+		spc = QLForth_symbol_add(ppc->pname);
+		spc->fun = ppc->fun;
+		spc->type = QLF_TYPE_PRIMITIVE;
+	}
+	
+	current = forth_bucket;
+	Compile_init();
+	Code_init();
+
+	current			= root_bucket;
+	ql4thvm_stack	= ql4thvm_dp	= &data_return_stack[0];
+	ql4thvm_stack_top = ql4thvm_rp	= &data_return_stack[STACK_DEEP_SIZE - 1];
+	sst_hot_spot	= sst_current	= &sst_buffer[0];
+	ql4thvm_state	= QLF_STATE_INTERACTIVE;
+
+	load_file_to_text(fname);
+	if (qlforth_text_buffer != NULL) {
 		ql4thvm_state = QLF_STATE_INTERPRET;
+		ql4th_interpreter(qlforth_text_buffer);
+		free(qlforth_text_buffer);
+		qlforth_text_buffer = NULL;
+		sst_current->type = SST_END;
+		Code_generation(sst_hot_spot);
+		ql4thvm_guard	= ql4thvm_here;
+		sst_hot_spot	= sst_current;
+		QLForth_report(0, (ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, 0);
+		// display_symbole_table(root_bucket);
 	}
-	return qlforth_text_buffer;
+	current = working_bucket;
 }
 
-void QLForth_interpreter(void * ptr) {
-
-	scan_ptr	= text_ptr = qlforth_text_buffer;
-	load_text	= load_save_scan_ptr = NULL;
-
-	ql4thvm_running = 0xff;
-	ql4thvm_force_break = 0;
-	if (setjmp(e_buf) == 0) {
-		while (!ql4thvm_force_break) {
-			while (QLForth_token() != 0 && !ql4thvm_force_break) {
-				_strupr(token_word);
-				switch (ql4thvm_state) {
-					case QLF_STATE_INTERACTIVE: qlforth_interactive();					break;
-					case QLF_STATE_INTERPRET:	qlforth_interpret();					break;
-					case QLF_STATE_COMPILE:		qlforth_compile();						break;
-				}
-			}
-
-			if (ql4thvm_state != QLF_STATE_INTERPRET && ql4thvm_state != QLF_STATE_INTERACTIVE) {
-				QLForth_error("Unexpect END-OF-File", NULL);
-			}
-
-			if (load_text == NULL && load_save_scan_ptr == NULL) {
-				break;
-			}
-
-			free(load_text);
-			scan_ptr	= load_save_scan_ptr;
-			load_text	= load_save_scan_ptr	= NULL;
-		}
-
-		if (ql4thvm_state == QLF_STATE_INTERPRET) {
-			sst_current->type = SST_END;
-			Code_generation(sst_hot_spot);
-
-			if (sst_hot_spot == &sst_buffer[0]) {
-				ql4thvm_guard	= ql4thvm_here;
-				sst_hot_spot	= sst_current;
-			}
-
-			// sst_node_list(&sst_buffer[0]);
-			QLForth_report(0, (ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, 0);
-		}
-
-		QLForth_display_stack(display_number_base, ql4thvm_dp - ql4thvm_stack, ql4thvm_tos, *(ql4thvm_dp - 1));
-		ql4thvm_state = QLF_STATE_INTERACTIVE;
-		// display_symbole_table(forth_bucket);
+void QLForth_interpreter(char * text) {
+	strcpy(interpret_text, text);
+	ql4thvm_state = QLF_STATE_INTERACTIVE;
+	ql4th_interpreter(interpret_text);
+	QLForth_display_stack(display_number_base, ql4thvm_dp - ql4thvm_stack, ql4thvm_tos, *(ql4thvm_dp - 1));
+	if (qlforth_text_buffer != NULL) {
+		free(qlforth_text_buffer);
+		qlforth_text_buffer = NULL;
 	}
-	ql4thvm_running = 0;
+}
+
+void QLForth_stop(void) {
 }
