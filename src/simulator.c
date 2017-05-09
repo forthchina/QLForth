@@ -85,6 +85,7 @@ static void execute(int entrypoint) {
 	int tmp_pc, tmp_tos;
 	int target, insn = 0x4000 | entrypoint;									// this is instruction : call entrypoint
 
+    tmp_tos = 0;
 	for (tmp_pc = -1; tmp_pc != 0; ) {
 		tmp_pc = vpc + 1;
 		if (insn & 0x8000) {												// FPGA J1 : literal

@@ -119,8 +119,8 @@ void QLForth_report(int msg, int data1, int data2, char * str) {
 int main(int argc, char * argv[]) {
 	static char keypad_in_buffer[TEXT_LINE_SIZE + 2];
 
-	QLForth_printf("QLForth Ver 0.3 \n") ;
-	QLForth_printf("By ZhaoYu, 2014.01 - 2017.04, ALL Right Reserved.\n\n") ;
+	QLForth_printf("QLForth Ver 0.4\n") ;
+	QLForth_printf("By ZhaoYu, 2014.01 - 2017.05, ALL Right Reserved.\n\n") ;
 
 #ifdef WIN32
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE) ql_console_handler, TRUE);

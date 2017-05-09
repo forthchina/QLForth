@@ -85,7 +85,7 @@ static int forth_number(char * str) {
 		ptr += 2;
 		base = 16;
 	}
-	token_value.ival = strtoul(ptr, &end_dptr, base);
+	token_value.ival = (int) strtoul(ptr, &end_dptr, base);
 
 	if (*end_dptr == '\0') {
 		if (negate) token_value.ival = -token_value.ival;
@@ -137,6 +137,7 @@ void qlforth_fp_docreate(void) {
 void * qlforth_alloc(int size_in_byte) {
 	char * pc;
 
+    pc = NULL;
 	size_in_byte = (size_in_byte - 1) / (sizeof(QLF_CELL)) + 1;
 	if ((ql4thvm_here + size_in_byte + 1) > ql4thvm_dict_top) {
 		QLForth_error("Memory Full", NULL);
@@ -153,7 +154,7 @@ static void debug_word(Symbol * spc) {
 	int cnt;
 
 	*ql4thvm_dp = ql4thvm_tos;
-	cnt = ql4thvm_dp - ql4thvm_stack;
+	cnt = (int) (ql4thvm_dp - ql4thvm_stack);
 
 	cnt = QLForth_chip_execute(spc->dfa, cnt, ql4thvm_stack);
 
@@ -175,14 +176,14 @@ static void load_file_to_text(char * fname) {
 	}
 	else {
 		fseek(fd, 0L, SEEK_END);
-		size = ftell(fd);
+		size = (int) ftell(fd);
 		fseek(fd, 0L, SEEK_SET);
 		if ((qlforth_text_buffer = (char *)malloc(size + 4)) == NULL) {
 			QLForth_printf("Out of Memory.");
 			fclose(fd);
 		}
 		else {
-			size = fread(qlforth_text_buffer, 1, size, fd);
+			size = (int) fread(qlforth_text_buffer, 1, size, fd);
 			fclose(fd);
 			*(qlforth_text_buffer + size) = 0;
 			*(qlforth_text_buffer + size + 1) = 0;
@@ -357,7 +358,7 @@ static void cfp_roll(void) {
 
 static void cfp_depth(void) {
 	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = (ql4thvm_dp - &ql4thvm_stack[1]);
+	ql4thvm_tos = (int) (ql4thvm_dp - &ql4thvm_stack[1]);
 }
 
 static void cfp_plus(void) {
@@ -960,7 +961,7 @@ static void cfp_dot_s(void) {
 	int cnt;
 
 	* ql4thvm_dp = ql4thvm_tos;
-	for (cnt = ql4thvm_dp - ql4thvm_stack; cnt > 0; cnt--) {
+	for (cnt = (int) (ql4thvm_dp - ql4thvm_stack); cnt > 0; cnt--) {
 		QLForth_printf("[%d] %d,  0x%08X\n", cnt, ql4thvm_stack[cnt], ql4thvm_stack[cnt]);
 	}
 }
@@ -1043,10 +1044,6 @@ static Primitive primitive_table[] = {
 	{ "-ROT",			cfp_mrot	},
 	{ "PICK",			cfp_pick	},
 	{ "ROLL",			cfp_roll	},
-
-	//	{ ">R",				cfp_to_r	},
-	//	{ "R@",				cfp_r_fetch },
-	//	{ "R>",				cfp_from_r	},
 
 	{ "DEPTH",			cfp_depth	},
 
@@ -1134,7 +1131,7 @@ void QLForth_error(char * msg, char * tk) {
 		}
 	}
 	err_flag = line;
-	QLForth_report(1, line - 1, scan_ptr - text_ptr, buffer);
+	QLForth_report(1, line - 1, (int) (scan_ptr - text_ptr), buffer);
 	longjmp(e_buf, -1) ;	
 }
 
@@ -1203,7 +1200,7 @@ Symbol * QLForth_symbol_add(char * name) {
 			*p = toupper(*p);
 		}
 	}
-	i	= sizeof(Symbol) + strlen(name);
+	i	= sizeof(Symbol) + (int) strlen(name);
 	spc = (Symbol *) qlforth_alloc(i);
 	strcpy(spc->name, name);
 	i	= hash_bucket((unsigned char *)name);
@@ -1282,7 +1279,7 @@ void QLForth_init(char * fname) {
 		Code_generation(sst_hot_spot);
 		ql4thvm_guard	= ql4thvm_here;
 		sst_hot_spot	= sst_current;
-		QLForth_report(0, (ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, 0);
+		QLForth_report(0, (int) (ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, NULL);
 		// display_symbole_table(root_bucket);
 	}
 	current = working_bucket;
@@ -1292,7 +1289,7 @@ void QLForth_interpreter(char * text) {
 	strcpy(interpret_text, text);
 	ql4thvm_state = QLF_STATE_INTERACTIVE;
 	ql4th_interpreter(interpret_text);
-	QLForth_display_stack(display_number_base, ql4thvm_dp - ql4thvm_stack, ql4thvm_tos, *(ql4thvm_dp - 1));
+	QLForth_display_stack(display_number_base, (int) (ql4thvm_dp - ql4thvm_stack), ql4thvm_tos, *(ql4thvm_dp - 1));
 	if (qlforth_text_buffer != NULL) {
 		free(qlforth_text_buffer);
 		qlforth_text_buffer = NULL;

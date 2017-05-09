@@ -278,7 +278,7 @@ void QLForth_sst_list(SSTNode * start, SSTNode * sst) {
 	SSTNode * ptr;
 	int count;
 
-	count = (start - sst);
+	count = (int) (start - sst);
 	for (ptr = start; ptr->type != SST_SEMICOLON; ptr++, count++) {
 		QLForth_printf("L_%08X  ", count);
 		switch (ptr->type) {
