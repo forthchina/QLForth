@@ -47,11 +47,11 @@
 
 static int ql_console_handler(int arg) {
 	QLForth_stop();
-	printf("QLForth VM Stoped!\n");
+	if (arg) {
+		QLForth_printf("QLForth VM Stoped!\n");
+	}
 	return 1;
 }
-
-
 
 int QLForth_printf(const char * fmt, ...) {
 	va_list data;
@@ -100,15 +100,15 @@ int QLForth_display_stack(int base, int depth, int data1, int data2) {
 	return 0;
 }
 
-void QLForth_report(int msg, int data1, int data2, int data3) {
+void QLForth_report(int msg, int data1, int data2, char * str) {
 	switch (msg) {
 		case 0:		
 			printf("Used Dictionary Space : %d of %d Bytes\n", data1, data2);		
 			break;
 
 		case 1:
-			if (data1 == 0) printf("Error : %s\n", (char *) data3);
-			else 			printf("Error at line %d : %s\n", data1 + 1, (char *)data3);
+			if (data1 == 0) printf("Error : %s\n", str);
+			else 			printf("Error at line %d : %s\n", data1 + 1, str);
 			break;
 
 		case 2:
@@ -122,7 +122,13 @@ int main(int argc, char * argv[]) {
 	QLForth_printf("QLForth Ver 0.3 \n") ;
 	QLForth_printf("By ZhaoYu, 2014.01 - 2017.04, ALL Right Reserved.\n\n") ;
 
+#ifdef WIN32
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE) ql_console_handler, TRUE);
+#else	
+	signal(SIGINT, (void *) ql_console_handler);
+	signal(SIGTERM, (void *) ql_console_handler);
+	signal(SIGPIPE, SIG_IGN);
+#endif
 
 	if (argc != 2) {
 		QLForth_printf("Usage : QLForth project-file-name.QLF <CR>\n");

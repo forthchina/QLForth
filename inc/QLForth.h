@@ -2,47 +2,33 @@
 #define _QLFORTH_H_
 
 #if defined(_WIN32)					// Winodws platform
-    #if defined(_WIN64)				// defined _WIN64, is a x64 platform
-        #define QLF_SIZE_64         1
-        typedef __int64 QLF_CELL;
-        typedef double  QLF_REAL;
-    #else							// not Win64, so it is a x86 32 bits platform
-        #define QLF_SIZE_32         1
-        typedef int     QLF_CELL;
-        typedef float   QLF_REAL;
-    #endif
-
-#else								// is a Linux GCC compiler
-    #if defined(__x86_64__)			// is a X64 Linux compiler
-        #define QLF_SIZE_64         1
-        typedef long	QLF_CELL;
-        typedef float   QLF_REAL;
-    #elif defined(__i386__)			// is a 32-bits Linux compiler
-        #define QLF_SIZE_32         1
-        typedef int     QLF_CELL;
-        typedef float   QLF_REAL;
-    #endif
-
-#endif
-
-#if defined(_WIN32)					// Winodws platform
 
 #include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <process.h>
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
 #include <setjmp.h>
 
+#define strupr	_strupr
+
 #else 
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <signal.h>
+#include <stdint.h>
+#include <math.h>
+#include <setjmp.h>
 
 #endif
+
+typedef int     QLF_CELL;
+typedef float   QLF_REAL;
 
 typedef enum {
 	QLF_TRUE = -1L,
@@ -190,7 +176,7 @@ void	* qlforth_alloc			(int size_in_byte);
 
 int  QLForth_printf				(const char * fmt, ...);
 int  QLForth_display_stack		(int base, int depth, int data1, int data2);
-void QLForth_report				(int msg, int data1, int data2, int data3);
+void QLForth_report				(int msg, int data1, int data2, char * str);
 
 void QLForth_init				(char * file_name);
 void QLForth_interpreter		(char * text);
@@ -199,7 +185,7 @@ int  QLForth_token				(void);
 void QLForth_error				(char * msg, char * tk); 
 Symbol * QLForth_symbol_search  (char * name);
 Symbol * QLForth_symbol_add		(char * name);
-SSTNode * QLForth_sst_append	(int type, int val);
+SSTNode * QLForth_sst_append	(int type, SSTNode * pc);
 void Compile_init				(void);
 void QLForth_sst_list			(SSTNode * start, SSTNode * sst);
 void Code_init					(void);

@@ -195,7 +195,7 @@ static void cfp_copy(void) {
 }
 
 static void display_assembly_instruction(int word) {
-	static unsigned char * instr[] = {
+	static char * instr[] = {
 		"+",		"xor",		"and",		"or",		"invert",
 		"=",		"<",		"u<",		"swap",		"dup",
 		"drop",		"over",		"nip",		">r",		"r>",
@@ -226,12 +226,12 @@ static Primitive extension_table[] = {
 	{ "INVERT",		cfp_invert		},
 	{ "=",			cfp_cmp_eq		},
 	{ "<",			cfp_cmp_lt		},
-	{ "U<",			cfp_cmp_lt		},
+	{ "U<",			cfp_cmp_u_lt	},
 	{ "SWAP",		cfp_swap		},
 	{ "DUP",		cfp_dup			},
 	{ "DROP",		cfp_drop		},
 	{ "OVER",		cfp_over		},
-	{ "NIP",		cfp_from_r		},
+	{ "NIP",		cfp_nip			},
 	{ ">R",			cfp_to_r		},
 	{ "R>",			cfp_from_r		},
 	{ "R@",			cfp_r_fetch		},

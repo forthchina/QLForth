@@ -98,39 +98,6 @@ static int forth_number(char * str) {
 	return 1;
 }
 
-static int forth_get_string(void) {
-	int idx, cc;
-
-	while (*scan_ptr != 0 && is_space(*scan_ptr)) {
-		scan_ptr++;
-	}
-	if (*scan_ptr == 0 || *scan_ptr != '\"') {
-		return 0;
-	}
-
-	idx = 0;
-	scan_ptr++;
-	while (*scan_ptr != 0 && (idx < (TEXT_LINE_SIZE - 2))) {
-		cc = *scan_ptr++;
-		if (cc == '\"') {
-			token_word[idx++] = 0;
-			return 1;
-		}
-		if (cc == '\\') {
-			switch (*scan_ptr++) {
-			case 'b': cc = '\b';	break;
-			case 'n': cc = '\n';	break;
-			case 'r': cc = '\r';	break;
-			case 't': cc = '\t';	break;
-			default:			    break;
-			}
-		}
-		token_word[idx++] = cc;
-	}
-	token_word[idx++] = 0;
-	return 0;
-}
-
 // ************  Symbol table management, part of has processing  *********************
 
 static unsigned int hash_bucket(unsigned char * name) {
@@ -223,22 +190,6 @@ static void load_file_to_text(char * fname) {
 	}
 }
 
-static void display_symbole_table(Symbol * bucket[]) {
-	int idx, cnt;
-	Symbol * spc;
-
-	for (idx = 0; idx < HASH_SIZE; idx++) {
-		if ((spc = bucket[idx]) != NULL) {
-			QLForth_printf("HASH : %d\n", idx);
-			cnt = 1;
-			do {
-				QLForth_printf("\t(%d) %s (DFA : 0x%08X)\n", cnt++, spc->name, spc->dfa);
-				spc = spc->link;
-			} while (spc != NULL);
-		}
-	}
-}
-
 static void qlforth_interactive(void) {
 	Symbol * spc;
 
@@ -302,8 +253,8 @@ static void qlforth_compile(void) {
 		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
 		case QLF_TYPE_COMPILE:		spc->fun();					break;
 		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-		case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (int)spc); break;
-		case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF, (int)spc);	break;
+		case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (SSTNode *) spc); break;
+		case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF,	 (SSTNode *) spc); break;
 		default:
 			QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
 			break;
@@ -319,15 +270,16 @@ static void qlforth_compile(void) {
 }
 
 static void ql4th_interpreter(char * text) {
+	char * p;
 	scan_ptr = text_ptr = text;
 
 	if (setjmp(e_buf) == 0) {
 		while (QLForth_token() != 0) {
-			_strupr(token_word);
+			for (p = token_word; *p; ++ p) * p = toupper(*p);
 			switch (ql4thvm_state) {
-			case QLF_STATE_INTERACTIVE: qlforth_interactive();					break;
-			case QLF_STATE_INTERPRET:	qlforth_interpret();					break;
-			case QLF_STATE_COMPILE:		qlforth_compile();						break;
+				case QLF_STATE_INTERACTIVE: qlforth_interactive();					break;
+				case QLF_STATE_INTERPRET:	qlforth_interpret();					break;
+				case QLF_STATE_COMPILE:		qlforth_compile();						break;
 			}
 		}
 
@@ -403,27 +355,10 @@ static void cfp_roll(void) {
 	}
 }
 
-static void cfp_to_r(void) {
-	*ql4thvm_rp-- = ql4thvm_tos;
-	ql4thvm_tos = *(--ql4thvm_dp);
-}
-
-static void cfp_r_fetch(void) {
-	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_rp + 1);
-}
-
-static void cfp_from_r(void) {
-	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = *(++ql4thvm_rp);
-}
-
 static void cfp_depth(void) {
 	*ql4thvm_dp++ = ql4thvm_tos;
 	ql4thvm_tos = (ql4thvm_dp - &ql4thvm_stack[1]);
 }
-
-// ....................................................................................
 
 static void cfp_plus(void) {
 	ql4thvm_tos += *(--ql4thvm_dp);
@@ -519,8 +454,6 @@ static void cfp_negate(void) {
 	ql4thvm_tos = -ql4thvm_tos;
 }
 
-// ....................................................................................
-
 static void cfp_cmp_lt(void) {
 	QLF_CELL nos;
 
@@ -589,21 +522,6 @@ static void cfp_xor(void) {
 
 static void cfp_not(void) {
 	ql4thvm_tos = ~ql4thvm_tos;
-}
-
-static void cfp_store(void) {
-	*(QLF_CELL *)ql4thvm_tos = *(--ql4thvm_dp);
-	ql4thvm_tos = *(--ql4thvm_dp);
-}
-
-static void cfp_fetch(void) {
-
-	ql4thvm_tos = *(QLF_CELL *)ql4thvm_tos;
-}
-
-static void cfp_comma(void) {
-	*ql4thvm_here++ = ql4thvm_tos;
-	ql4thvm_tos = *(--ql4thvm_dp);
 }
 
 static void cfp_f_plus(void) {
@@ -846,7 +764,7 @@ static void cfp_colon(void) {
 	ThisCreateWord->type = QLF_TYPE_WORD;
 	ThisCreateWord->dfa = 0;
 	ThisCreateWord->hidden = 1;
-	ThisCreateWord->sst = QLForth_sst_append(SST_COLON, (int)ThisCreateWord);
+	ThisCreateWord->sst = QLForth_sst_append(SST_COLON, (SSTNode *) ThisCreateWord);
 	cs_ptr = &cs_stack[0];
 	cs_ptr->id		= CSID_COLON;
 	ql4thvm_state	= QLF_STATE_COMPILE;
@@ -863,8 +781,8 @@ static void cfp_semicolon(void) {
 	if (ql4thvm_state != QLF_STATE_COMPILE) {
 		QLForth_error("State changed during word compilation", NULL);
 	}
-	QLForth_sst_append(SST_RET, 0);
-	QLForth_sst_append(SST_SEMICOLON, 0);
+	QLForth_sst_append(SST_RET, NULL);
+	QLForth_sst_append(SST_SEMICOLON, NULL);
 	ql4thvm_state = QLF_STATE_INTERPRET;
 
 	ThisCreateWord->hidden = 0;
@@ -873,7 +791,6 @@ static void cfp_semicolon(void) {
 
 static void cfp_variable(void) {
 	Symbol	* spc;
-	SSTNode * sst;
 
 	if (!QLForth_token()) {
 		QLForth_error("Expect a word", NULL);
@@ -883,18 +800,15 @@ static void cfp_variable(void) {
 		return;
 	}
 	spc->type = QLF_TYPE_VARIABLE;
-	sst = QLForth_sst_append(SST_VARIABLE, (int)spc);
-	spc->dfa = 0;
-	spc->type = QLF_TYPE_PRIMITIVE;
-	spc->fun = qlforth_fp_docreate;
-	spc->dfa = (QLF_CELL)ql4thvm_here;
+	QLForth_sst_append(SST_VARIABLE, (SSTNode *) spc);
+	spc->dfa 	= 0;
 	ql4thvm_here++;
 }
 
 static void cfp_if(void) {
 	cs_ptr++;
 	cs_ptr->id = CSID_IF;
-	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, 0);
+	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, NULL);
 }
 
 static void cfp_else(void) {
@@ -903,8 +817,8 @@ static void cfp_else(void) {
 	if (cs_ptr->id != CSID_IF) {
 		QLForth_error("No IF for this ELSE", NULL);
 	}
-	sst = QLForth_sst_append(SST_BRANCH, 0);
-	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, 0);
+	sst = QLForth_sst_append(SST_BRANCH, NULL);
+	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
 	cs_ptr->sst = sst;
 }
 
@@ -912,14 +826,14 @@ static void cfp_endif(void) {
 	if (cs_ptr->id != CSID_IF) {
 		QLForth_error("No IF for this THEN/ENDIF", NULL);
 	}
-	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, 0);
+	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
 	cs_ptr--;
 }
 
 static void cfp_begin(void) {
 	cs_ptr++;
 	cs_ptr->id = CSID_BEGIN;
-	cs_ptr->sst = QLForth_sst_append(SST_LABEL, 0);
+	cs_ptr->sst = QLForth_sst_append(SST_LABEL, NULL);
 	cs_ptr->pos = ql4thvm_here;
 }
 
@@ -929,7 +843,7 @@ static void cfp_while(void) {
 	}
 	cs_ptr++;
 	cs_ptr->id = CSID_WHILE;
-	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, 0);
+	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, NULL);
 }
 
 static void cfp_repeat(void) {
@@ -938,8 +852,8 @@ static void cfp_repeat(void) {
 	if (cs_ptr->id != CSID_WHILE) {
 		QLForth_error("No WHILE for this REPEAT", NULL);
 	}
-	sst = QLForth_sst_append(SST_BRANCH, 0);
-	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, 0);
+	sst = QLForth_sst_append(SST_BRANCH, NULL);
+	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
 	cs_ptr--;
 	sst->sst = cs_ptr->sst;
 	cs_ptr--;
@@ -949,21 +863,21 @@ static void cfp_until(void) {
 	if (cs_ptr->id != CSID_BEGIN) {
 		QLForth_error("No WHILE for this UNTIL", NULL);
 	}
-	QLForth_sst_append(SST_0_BRANCH, (int)cs_ptr->sst);
+	QLForth_sst_append(SST_0_BRANCH, cs_ptr->sst);
 	cs_ptr--;
 }
 
 static void cfp_do(void) {
 	cs_ptr++;
 	cs_ptr->id = CSID_DO;
-	cs_ptr->sst = QLForth_sst_append(SST_DO, 0);
+	cs_ptr->sst = QLForth_sst_append(SST_DO, NULL);
 }
 
 static void cfp_loop(void) {
 	if (cs_ptr->id != CSID_DO) {
 		QLForth_error("No DO matched this LOOP", NULL);
 	}
-	QLForth_sst_append(SST_LOOP, (int)cs_ptr->sst);
+	QLForth_sst_append(SST_LOOP, cs_ptr->sst);
 	cs_ptr--;
 }
 
@@ -979,13 +893,13 @@ static void cfp_leave(void) {
 	if (csp->id == SST_COLON || csp == cs_stack) {
 		QLForth_error("No DO or FOR matched this EXIT", NULL);
 	}
-	QLForth_sst_append(SST_LEAVE, (int)csp->sst);
+	QLForth_sst_append(SST_LEAVE, csp->sst);
 }
 
 static void cfp_for(void) {
 	cs_ptr++;
 	cs_ptr->id = CSID_FOR;
-	cs_ptr->sst = QLForth_sst_append(SST_FOR, 0);
+	cs_ptr->sst = QLForth_sst_append(SST_FOR, NULL);
 	cs_ptr->pos = ql4thvm_here;
 }
 
@@ -994,29 +908,36 @@ static void cfp_next(void) {
 	if (cs_ptr->id != CSID_FOR) {
 		QLForth_error("No FOR  with this NEXT", NULL);
 	}
-	QLForth_sst_append(SST_NEXT, (int)cs_ptr->sst);
+	QLForth_sst_append(SST_NEXT, cs_ptr->sst);
 	cs_ptr--;
 }
 
 static void cfp_tick(void) {
 	Symbol * spc;
+	char * p;
 
 	if (!QLForth_token()) {
 		QLForth_error("Expect a word", NULL);
 	}
-	_strupr(token_word);
+	for (p = token_word; *p; ++p) * p = toupper(*p);
 	if ((spc = QLForth_symbol_search(token_word)) == NULL) {
 		QLForth_error("Word not found", token_word);
 	}
 }
 
 static void cfp_sharp(void) {
-	QLForth_sst_append(SST_LITERAL, ql4thvm_tos);
+	SSTNode * sst;
+	
+	sst = QLForth_sst_append(SST_LITERAL, NULL);
+	sst->val = ql4thvm_tos;
 	ql4thvm_tos = *(--ql4thvm_dp);
 }
 
 static void cfp_allot(void) {
-	QLForth_sst_append(SST_ALLOT, ql4thvm_tos);
+	SSTNode * sst;
+	
+	sst = QLForth_sst_append(SST_ALLOT, NULL);
+	sst->val = ql4thvm_tos;
 	ql4thvm_tos = *(--ql4thvm_dp);
 }
 
@@ -1046,12 +967,13 @@ static void cfp_dot_s(void) {
 
 static void cfp_see(void) {
 	Symbol * spc;
+	char * p;
 
 	if (!QLForth_token()) {
 		QLForth_error("Expect a word", NULL);
 	}
 
-	_strupr(token_word);
+	for (p = token_word; *p; ++p) * p = toupper(*p);
 	if ((spc = QLForth_symbol_search(token_word)) == NULL) {
 		QLForth_error("word - %s - not found.\n", token_word); 
 		return;
@@ -1069,22 +991,22 @@ static void cfp_see(void) {
 // ************  Primitive entry table  ***********************************************
 
 static Primitive command_table[] = {
-	{ "MAKE",				forth_make			},
-    { "QUIT",               forth_quit          },
+	{ "MAKE",			forth_make			},
+    { "QUIT",           forth_quit          },
 
-	{ ".S",					cfp_dot_s			},
-	{ "SEE",				cfp_see				},
-	{ "CLEAR",				forth_clear			},
+	{ ".S",				cfp_dot_s			},
+	{ "SEE",			cfp_see				},
+	{ "CLEAR",			forth_clear			},
 
-	{ NULL,					NULL				}
+	{ NULL,				NULL				}
 };
 
 static Primitive define_table[] = {
-	{ "CONSTANT",			cfp_constant		},
-	{ ":",					cfp_colon			},
-	{ "VARIABLE",			cfp_variable		},
+	{ "CONSTANT",		cfp_constant		},
+	{ ":",				cfp_colon			},
+	{ "VARIABLE",		cfp_variable		},
 	
-	{ NULL,					NULL				}
+	{ NULL,				NULL				}
 
 } ;
 
@@ -1094,8 +1016,8 @@ static Primitive immediate_table[] = {
 	{ "#",				cfp_sharp },
 	{ "ALLOT",			cfp_allot },
 
-	{ "IF",				cfp_if },
-	{ "ELSE",			cfp_else },
+	{ "IF",				cfp_if		},
+	{ "ELSE",			cfp_else 	},
 	{ "ENDIF",			cfp_endif },
 	{ "THEN",			cfp_endif },
 	{ "BEGIN",			cfp_begin },
@@ -1163,10 +1085,6 @@ static Primitive primitive_table[] = {
 	{ "XOR",			cfp_xor		},
 	{ "NOT",			cfp_not		},
 
-	//	{ "!",				cfp_store	},
-	//	{ "@",				cfp_fetch	},
-	//	{ ",",				cfp_comma	},
-
 	{ "F+",				cfp_f_plus	},
 	{ "F-",				cfp_f_minus },
 	{ "F*",				cfp_f_mul	},
@@ -1216,7 +1134,7 @@ void QLForth_error(char * msg, char * tk) {
 		}
 	}
 	err_flag = line;
-	QLForth_report(1, line - 1, scan_ptr - text_ptr, (int) buffer);
+	QLForth_report(1, line - 1, scan_ptr - text_ptr, buffer);
 	longjmp(e_buf, -1) ;	
 }
 
@@ -1278,8 +1196,13 @@ Symbol * QLForth_symbol_search(char * name) {
 Symbol * QLForth_symbol_add(char * name) {
 	QLF_CELL	i;
 	Symbol	    * spc;
+	char		* p;
 
-	_strupr(name);
+	for (p = name; *p; ++p) {
+		if (islower(*p)) {
+			*p = toupper(*p);
+		}
+	}
 	i	= sizeof(Symbol) + strlen(name);
 	spc = (Symbol *) qlforth_alloc(i);
 	strcpy(spc->name, name);
@@ -1289,7 +1212,7 @@ Symbol * QLForth_symbol_add(char * name) {
 	return spc;
 }
 
-SSTNode * QLForth_sst_append(int type, int val) {
+SSTNode * QLForth_sst_append(int type, SSTNode * pc) {
 	SSTNode * ptr;
 
 	if (sst_current > & sst_buffer[SST_NODE_MAX]) {
@@ -1297,7 +1220,7 @@ SSTNode * QLForth_sst_append(int type, int val) {
 	}
 	ptr			= sst_current++;
 	ptr->type	= type;
-	ptr->val	= val;
+	ptr->sst	= pc;
 	return ptr;
 }
 

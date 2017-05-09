@@ -47,7 +47,7 @@
 
 static int code_ptr, code_ptr_save;
 static unsigned char code_buffer[MEM_SIZE_IN_BYTE + 1];
-static 	SSTNode * sst;
+static SSTNode * sst;
 
 static void code_not_support(char * name) {
 	QLForth_error("Sorry for not implemented word - %s.", name);
@@ -60,7 +60,7 @@ static void code_ref_word(char * name) {
 		QLForth_error("The primitive word : %s : not found.", name);
 	}
 	
-	* (unsigned short *)& code_buffer[code_ptr] = (spc->dfa & 0x1FFF) | 0x4000;
+	* (short *)& code_buffer[code_ptr] = (short)((spc->dfa & 0x1FFF) | 0x4000);
 	code_ptr += 2;
 }
 
