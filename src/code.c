@@ -1,8 +1,8 @@
 /* ************************************************************************************
 * Copyright (C) 2015-2017 Shaanxi QinWei Electroics Technologies. All rights reserved.
 *
-* $Date:        9. May 2017
-* $Revision: 	V 0.4
+* $Date:        11 May 2017
+* $Revision: 	V 0.5
 *
 * Project: 	    QLForth - A Forth for System-On-Chip Creative Makers
 *
@@ -10,7 +10,7 @@
 *
 * Description:	The architecture specifies target code generator for QLForth
 *
-* Target:		Windows 7+
+* Target:		Windows 7+ / Linux / Mac OS X
 *
 * Author:		Zhao Yu, forthchina@163.com, forthchina@gmail.com
 *			    25/04/2017 (In dd/mm/yyyy)

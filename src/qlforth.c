@@ -1,8 +1,8 @@
 /* ************************************************************************************
 * Copyright (C) 2015-2017 Shaanxi QinWei Electroics Technologies. All rights reserved.
 *
-* $Date:        9. May 2017
-* $Revision: 	V 0.4
+* $Date:        11 May 2017
+* $Revision: 	V 0.5
 *
 * Project: 	    QLForth - A Forth for System-On-Chip Creative Makers
 *
@@ -10,7 +10,7 @@
 *
 * Description:	The main entry for QLForth
 *
-* Target:		Windows 7+
+* Target:		Windows 7+ / Linux / Mac OS X
 *
 * Author:		Zhao Yu, forthchina@163.com, forthchina@gmail.com
 *			    25/04/2017 (In dd/mm/yyyy)
@@ -48,7 +48,7 @@ QLF_CELL		ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_st
 char			token_word[TEXT_LINE_SIZE];
 
 static Symbol	* ThisCreateWord, *ThisExecuteWord ;
-static QLF_CELL dict_buffer[DICT_BUFFER_SIZE + 4], data_return_stack[STACK_DEEP_SIZE + 2],
+static QLF_CELL dict_buffer[DICT_BUFFER_SIZE + 4], data_stack[STACK_DEEP_SIZE + 2],
 				* ql4thvm_dict_top, * ql4thvm_dict, * ql4thvm_guard, * ql4thvm_here;
 static char		* scan_ptr,* text_ptr, * qlforth_text_buffer, interpret_text[TEXT_LINE_SIZE];
 static Symbol	* root_bucket[HASH_SIZE + 1], * forth_bucket[HASH_SIZE + 1], 
@@ -85,7 +85,7 @@ static int forth_number(char * str) {
 		ptr += 2;
 		base = 16;
 	}
-	token_value.ival = (int) strtoul(ptr, &end_dptr, base);
+	token_value.ival = (QLF_CELL) strtoul(ptr, &end_dptr, base);
 
 	if (*end_dptr == '\0') {
 		if (negate) token_value.ival = -token_value.ival;
@@ -154,11 +154,11 @@ static void debug_word(Symbol * spc) {
 	int cnt;
 
 	*ql4thvm_dp = ql4thvm_tos;
-	cnt = (int) (ql4thvm_dp - ql4thvm_stack);
+	cnt = (QLF_CELL) (ql4thvm_dp - ql4thvm_stack);
 
 	cnt = QLForth_chip_execute(spc->dfa, cnt, ql4thvm_stack);
 
-	ql4thvm_dp = &data_return_stack[cnt];
+	ql4thvm_dp = &data_stack[cnt];
 	ql4thvm_tos = *ql4thvm_dp;
 }
 
@@ -176,14 +176,14 @@ static void load_file_to_text(char * fname) {
 	}
 	else {
 		fseek(fd, 0L, SEEK_END);
-		size = (int) ftell(fd);
+		size = (QLF_CELL) ftell(fd);
 		fseek(fd, 0L, SEEK_SET);
 		if ((qlforth_text_buffer = (char *)malloc(size + 4)) == NULL) {
 			QLForth_printf("Out of Memory.");
 			fclose(fd);
 		}
 		else {
-			size = (int) fread(qlforth_text_buffer, 1, size, fd);
+			size = (QLF_CELL) fread(qlforth_text_buffer, 1, size, fd);
 			fclose(fd);
 			*(qlforth_text_buffer + size) = 0;
 			*(qlforth_text_buffer + size + 1) = 0;
@@ -196,21 +196,21 @@ static void qlforth_interactive(void) {
 
 	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
 		switch (spc->type) {
-		case QLF_TYPE_COMMAND:		spc->fun();					break;
-		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-		case QLF_TYPE_WORD:			debug_word(spc);			break;
-		case QLF_TYPE_VARIABLE:		debug_variable(spc);		break;
-		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-		case QLF_TYPE_COMPILE:
-			if ((spc = qlforth_root_search(token_word)) != NULL) {
-				if (spc->type == QLF_TYPE_PRIMITIVE) {
-					spc->fun();									break;
+			case QLF_TYPE_COMMAND:		spc->fun();					break;
+			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+			case QLF_TYPE_WORD:			debug_word(spc);			break;
+			case QLF_TYPE_VARIABLE:		debug_variable(spc);		break;
+			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+			case QLF_TYPE_COMPILE:
+				if ((spc = qlforth_root_search(token_word)) != NULL) {
+					if (spc->type == QLF_TYPE_PRIMITIVE) {
+						spc->fun();									break;
+					}
 				}
-			}
-			// fall into
-		default:
-			QLForth_error("Word - %s - cannot be used in INTERACTIVE mode", token_word);
-			break;
+				// fall into
+			default:
+				QLForth_error("Word - %s - cannot be used in INTERACTIVE mode", token_word);
+				break;
 		}
 	}
 	else if (forth_number(token_word)) {
@@ -229,14 +229,14 @@ static void qlforth_interpret(void) {
 	}
 	if (spc != NULL) {
 		switch (spc->type) {
-		case QLF_TYPE_COMMAND:		spc->fun();					break;
-		case QLF_TYPE_DEFINE:		spc->fun();					break;
-		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-		default:
-			QLForth_error("Word - %s - cannot be used in INTERPRET mode", token_word);
-			break;
-		}
+			case QLF_TYPE_COMMAND:		spc->fun();					break;
+			case QLF_TYPE_DEFINE:		spc->fun();					break;
+			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+			default:
+				QLForth_error("Word - %s - cannot be used in INTERPRET mode", token_word);
+				break;
+			}
 	}
 	else if (forth_number(token_word)) {
 		qlforth_push(token_value.ival);
@@ -251,14 +251,14 @@ static void qlforth_compile(void) {
 
 	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
 		switch (spc->type) {
-		case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-		case QLF_TYPE_COMPILE:		spc->fun();					break;
-		case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-		case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (SSTNode *) spc); break;
-		case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF,	 (SSTNode *) spc); break;
-		default:
-			QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
-			break;
+			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+			case QLF_TYPE_COMPILE:		spc->fun();					break;
+			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+			case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (SSTNode *) spc); break;
+			case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF,	 (SSTNode *) spc); break;
+			default:
+				QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
+				break;
 
 		}
 	}
@@ -358,7 +358,7 @@ static void cfp_roll(void) {
 
 static void cfp_depth(void) {
 	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = (int) (ql4thvm_dp - &ql4thvm_stack[1]);
+	ql4thvm_tos = (QLF_CELL) (ql4thvm_dp - &ql4thvm_stack[1]);
 }
 
 static void cfp_plus(void) {
@@ -772,6 +772,23 @@ static void cfp_colon(void) {
 	cs_ptr++;
 }
 
+static void cfp_macro(void) {
+	if (!QLForth_token()) {
+		QLForth_error("Expect a word", NULL);
+	}
+
+	if ((ThisCreateWord = QLForth_symbol_add(token_word)) == NULL) {
+		return;
+	}
+	ThisCreateWord->type	= QLF_TYPE_MACRO;
+	ThisCreateWord->dfa		= 0;
+	ThisCreateWord->hidden	= 1;
+	cs_ptr					= &cs_stack[0];
+	cs_ptr->id				= CSID_MACRO;
+	ql4thvm_state = QLF_STATE_COMPILE;
+	cs_ptr++;
+}
+
 static void cfp_semicolon(void) {
 	cs_ptr--;
 	if ((cs_ptr != &cs_stack[0]) || (cs_ptr->id != CSID_COLON)) {
@@ -945,8 +962,8 @@ static void cfp_allot(void) {
 // ************  Forth Command for developers *****************************************
 
 static void forth_clear(void) {
-	ql4thvm_stack = ql4thvm_dp = &data_return_stack[0];
-	ql4thvm_stack_top = ql4thvm_rp = &data_return_stack[STACK_DEEP_SIZE - 1];
+	ql4thvm_stack = ql4thvm_dp = &data_stack[0];
+	ql4thvm_stack_top = ql4thvm_rp = &data_stack[STACK_DEEP_SIZE - 1];
 }
 
 static void forth_make(void) {
@@ -961,7 +978,7 @@ static void cfp_dot_s(void) {
 	int cnt;
 
 	* ql4thvm_dp = ql4thvm_tos;
-	for (cnt = (int) (ql4thvm_dp - ql4thvm_stack); cnt > 0; cnt--) {
+	for (cnt = (QLF_CELL) (ql4thvm_dp - ql4thvm_stack); cnt > 0; cnt--) {
 		QLForth_printf("[%d] %d,  0x%08X\n", cnt, ql4thvm_stack[cnt], ql4thvm_stack[cnt]);
 	}
 }
@@ -1006,6 +1023,9 @@ static Primitive define_table[] = {
 	{ "CONSTANT",		cfp_constant		},
 	{ ":",				cfp_colon			},
 	{ "VARIABLE",		cfp_variable		},
+
+	{ "MACRO",			cfp_macro			},
+	{ "::",				cfp_macro			},
 	
 	{ NULL,				NULL				}
 
@@ -1131,7 +1151,7 @@ void QLForth_error(char * msg, char * tk) {
 		}
 	}
 	err_flag = line;
-	QLForth_report(1, line - 1, (int) (scan_ptr - text_ptr), buffer);
+	QLForth_report(1, line - 1, (QLF_CELL) (scan_ptr - text_ptr), buffer);
 	longjmp(e_buf, -1) ;	
 }
 
@@ -1200,7 +1220,7 @@ Symbol * QLForth_symbol_add(char * name) {
 			*p = toupper(*p);
 		}
 	}
-	i	= sizeof(Symbol) + (int) strlen(name);
+	i	= sizeof(Symbol) + (QLF_CELL) strlen(name);
 	spc = (Symbol *) qlforth_alloc(i);
 	strcpy(spc->name, name);
 	i	= hash_bucket((unsigned char *)name);
@@ -1227,8 +1247,8 @@ void QLForth_init(char * fname) {
 	Primitive	* ppc;
 	Symbol		* spc;
 
-	ql4thvm_dict = ql4thvm_here = &dict_buffer[0];
-	ql4thvm_dict_top = &dict_buffer[DICT_BUFFER_SIZE];
+	ql4thvm_dict		= ql4thvm_here = &dict_buffer[0];
+	ql4thvm_dict_top	= &dict_buffer[DICT_BUFFER_SIZE];
 	memset(dict_buffer,		0, sizeof(dict_buffer));
 	memset(root_bucket,		0, sizeof(root_bucket));
 	memset(forth_bucket,	0, sizeof(forth_bucket));
@@ -1264,8 +1284,8 @@ void QLForth_init(char * fname) {
 	Code_init();
 
 	current			= root_bucket;
-	ql4thvm_stack	= ql4thvm_dp	= &data_return_stack[0];
-	ql4thvm_stack_top = ql4thvm_rp	= &data_return_stack[STACK_DEEP_SIZE - 1];
+	ql4thvm_stack	= ql4thvm_dp	= &data_stack[0];
+	ql4thvm_stack_top = ql4thvm_rp	= &data_stack[STACK_DEEP_SIZE - 1];
 	sst_hot_spot	= sst_current	= &sst_buffer[0];
 	ql4thvm_state	= QLF_STATE_INTERACTIVE;
 
@@ -1279,7 +1299,7 @@ void QLForth_init(char * fname) {
 		Code_generation(sst_hot_spot);
 		ql4thvm_guard	= ql4thvm_here;
 		sst_hot_spot	= sst_current;
-		QLForth_report(0, (int) (ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, NULL);
+		QLForth_report(0, (QLF_CELL) (ql4thvm_here - ql4thvm_dict) * sizeof(QLF_CELL), DICT_BUFFER_SIZE, NULL);
 		// display_symbole_table(root_bucket);
 	}
 	current = working_bucket;
@@ -1289,7 +1309,7 @@ void QLForth_interpreter(char * text) {
 	strcpy(interpret_text, text);
 	ql4thvm_state = QLF_STATE_INTERACTIVE;
 	ql4th_interpreter(interpret_text);
-	QLForth_display_stack(display_number_base, (int) (ql4thvm_dp - ql4thvm_stack), ql4thvm_tos, *(ql4thvm_dp - 1));
+	QLForth_display_stack(display_number_base, (QLF_CELL) (ql4thvm_dp - ql4thvm_stack), ql4thvm_tos, *(ql4thvm_dp - 1));
 	if (qlforth_text_buffer != NULL) {
 		free(qlforth_text_buffer);
 		qlforth_text_buffer = NULL;

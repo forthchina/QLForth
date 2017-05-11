@@ -1,7 +1,7 @@
 
 TARGETS = QLForth
 
-SRC_DIR = src
+SRC_DIR = ../src
 OBJ_DIR	= bin
 
 SRCS = $(wildcard $(SRC_DIR)/*.c)
@@ -11,7 +11,7 @@ CC      := gcc
 LIBS    := 
 LDFLAGS := -lm
 DEFINES :=
-INCLUDE := -Iinc
+INCLUDE := 
 CFLAGS  := -c -g -Wall -O3 -std=c99 $(DEFINES) $(INCLUDE)
 RM      = rm -f -v
 

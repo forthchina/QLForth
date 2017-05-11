@@ -19,15 +19,15 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\inc\QLForth.h" />
-    <ClInclude Include="..\inc\QLSOC.h" />
+    <ClCompile Include="..\src\code.c" />
+    <ClCompile Include="..\src\compiler.c" />
+    <ClCompile Include="..\src\main.c" />
+    <ClCompile Include="..\src\qlforth.c" />
+    <ClCompile Include="..\src\simulator.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\Code.c" />
-    <ClCompile Include="..\src\Compiler.c" />
-    <ClCompile Include="..\src\main.c" />
-    <ClCompile Include="..\src\QLForth.c" />
-    <ClCompile Include="..\src\Simulator.c" />
+    <ClInclude Include="..\src\QLForth.h" />
+    <ClInclude Include="..\src\QLSOC.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{B8CD1EAB-4FF1-4977-AD08-D7B084AADF6A}</ProjectGuid>
@@ -99,7 +99,8 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\inc;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>
+      </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

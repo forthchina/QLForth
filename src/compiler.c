@@ -1,8 +1,8 @@
 /* ************************************************************************************
 * Copyright (C) 2015-2017 Shaanxi QinWei Electroics Technologies. All rights reserved.
 *
-* $Date:        9. May 2017
-* $Revision: 	V 0.4
+* $Date:        11 May 2017
+* $Revision: 	V 0.5
 *
 * Project: 	    QLForth - A Forth for System-On-Chip Creative Makers
 *
@@ -10,7 +10,7 @@
 *
 * Description:	The cross compiler for QLForth
 *
-* Target:		Windows 7+
+* Target:		Windows 7+ / Linux / Mac OS X
 *
 * Author:		Zhao Yu, forthchina@163.com, forthchina@gmail.com
 *			    25/04/2017 (In dd/mm/yyyy)
@@ -278,7 +278,7 @@ void QLForth_sst_list(SSTNode * start, SSTNode * sst) {
 	SSTNode * ptr;
 	int count;
 
-	count = (int) (start - sst);
+	count = (QLF_CELL) (start - sst);
 	for (ptr = start; ptr->type != SST_SEMICOLON; ptr++, count++) {
 		QLForth_printf("L_%08X  ", count);
 		switch (ptr->type) {
