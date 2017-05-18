@@ -10,7 +10,7 @@ The QLForth cross compiler generates an internal custom-format simple syntax tre
 
 QLForth supports interactive testing with Forth mode. The actual project consists of a single source code, which can be edited using any text editor tool and loaded at start-up. Then the user can edit a small text file, each contains only several colon definitions, repeatedly load and compile the file and test these words. QLForth's command-line interaction simulates or actually executes the Forth words, automatically synchronizes the contents of the QLForth system and the target processor's data stack. After each word execution, the value of top of stack will be display automatically.
 
-QLForth is compatible with Windows, Linux, Mac OS X 32/64 bit system. The C source code has been compiled by VS 2015 and Tiny CC (Windows), GCC (Linux) and LLVM (Mac OS X) compiler. Users can edit the Forth program with standard editor on these platforms and simulate or actual execution the target code.
+QLForth is compatible with Windows, Linux, Mac OS X 32/64 bits system. The C source code has been compiled by VS 2015 and Tiny CC (Windows), GCC (Linux) and LLVM (Mac OS X) compiler. Users can edit the Forth program with standard editor on these platforms and simulate or actual execution the target code.
 
 The QLForth is on GitHub, please visit https://github.com/forthchina/QLForth
 

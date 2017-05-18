@@ -139,19 +139,14 @@ typedef struct _sst_node {
 	char	type, not_used;
 } SSTNode;
 
-typedef struct _cstack {
-	int			id;
-	union {
-		QLF_CELL	* pos;
-		SSTNode		* sst;
-	};
-
-} CONTROL_STACK;
-
 // ************************************************************************************
 
-extern QLF_CELL		ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
-extern char			token_word[];
+QLF_LITERAL		token_value;
+QLF_CELL		* ql4thvm_here,
+				ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
+char			token_word[];
+Symbol			** program_counter, *ThisCreateWord, *ThisExecuteWord;
+int				ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
 
 // ************************************************************************************
 
@@ -189,6 +184,7 @@ Symbol * QLForth_symbol_search  (char * name);
 Symbol * QLForth_symbol_add		(char * name);
 SSTNode * QLForth_sst_append	(int type, SSTNode * pc);
 void Compile_init				(void);
+void Forth_init					(void);
 void QLForth_sst_list			(SSTNode * start, SSTNode * sst);
 void Code_init					(void);
 void Code_generation			(SSTNode * start);

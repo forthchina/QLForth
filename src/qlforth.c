@@ -44,22 +44,21 @@
 
 #include "QLForth.h"
 
-QLF_CELL		ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
+QLF_LITERAL		token_value;
+QLF_CELL		* ql4thvm_here,
+				ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
 char			token_word[TEXT_LINE_SIZE];
+Symbol			** program_counter, *ThisCreateWord, *ThisExecuteWord;
+int				ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
 
-static Symbol	* ThisCreateWord, *ThisExecuteWord ;
 static QLF_CELL dict_buffer[DICT_BUFFER_SIZE + 4], data_stack[STACK_DEEP_SIZE + 2],
-				* ql4thvm_dict_top, * ql4thvm_dict, * ql4thvm_guard, * ql4thvm_here;
+				* ql4thvm_dict_top, * ql4thvm_dict, * ql4thvm_guard;
 static char		* scan_ptr,* text_ptr, * qlforth_text_buffer, interpret_text[TEXT_LINE_SIZE];
 static Symbol	* root_bucket[HASH_SIZE + 1], * forth_bucket[HASH_SIZE + 1], 
 				* working_bucket[HASH_SIZE + 1], ** current;
-static int		err_flag, ql4thvm_state, display_number_base = 10;
+static int		err_flag, display_number_base = 10;
 static SSTNode  sst_buffer[SST_NODE_MAX + 1], *sst_current, * sst_hot_spot;
 static jmp_buf  e_buf;
-
-static CONTROL_STACK cs_stack[MAX_CONTROL_STACK_DEEP + 1], *cs_ptr;
-static QLF_LITERAL	 token_value;
-
 
 // ************  Scanner functions , Text process *************************************
 
@@ -98,7 +97,7 @@ static int forth_number(char * str) {
 	return 1;
 }
 
-// ************  Symbol table management, part of has processing  *********************
+// ************  Symbol table management, part of hash processing  ********************
 
 static unsigned int hash_bucket(unsigned char * name) {
 	unsigned int  h;
@@ -150,6 +149,17 @@ void * qlforth_alloc(int size_in_byte) {
 	return (void *)pc;
 }
 
+static void macro_execute(Symbol * spc) {
+	ThisExecuteWord = spc;
+	program_counter = NULL;
+	ThisExecuteWord->fun();
+	while (program_counter && !ql4thvm_force_break) {
+		ThisExecuteWord = *program_counter++;
+		ThisExecuteWord->fun();
+	}
+	ThisExecuteWord = NULL;
+}
+
 static void debug_word(Symbol * spc) {
 	int cnt;
 
@@ -198,6 +208,7 @@ static void qlforth_interactive(void) {
 		switch (spc->type) {
 			case QLF_TYPE_COMMAND:		spc->fun();					break;
 			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+			case QLF_TYPE_MACRO:		macro_execute(spc);			break;
 			case QLF_TYPE_WORD:			debug_word(spc);			break;
 			case QLF_TYPE_VARIABLE:		debug_variable(spc);		break;
 			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
@@ -232,11 +243,12 @@ static void qlforth_interpret(void) {
 			case QLF_TYPE_COMMAND:		spc->fun();					break;
 			case QLF_TYPE_DEFINE:		spc->fun();					break;
 			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
+			case QLF_TYPE_MACRO:		macro_execute(spc);			break;
 			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
 			default:
 				QLForth_error("Word - %s - cannot be used in INTERPRET mode", token_word);
 				break;
-			}
+		}
 	}
 	else if (forth_number(token_word)) {
 		qlforth_push(token_value.ival);
@@ -253,6 +265,8 @@ static void qlforth_compile(void) {
 		switch (spc->type) {
 			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
 			case QLF_TYPE_COMPILE:		spc->fun();					break;
+			case QLF_TYPE_IMMEDIATE:	spc->fun();					break;
+			case QLF_TYPE_MACRO:		macro_execute(spc);			break;
 			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
 			case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (SSTNode *) spc); break;
 			case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF,	 (SSTNode *) spc); break;
@@ -270,6 +284,32 @@ static void qlforth_compile(void) {
 	}
 }
 
+static void qlforth_macro(void) {
+	static Symbol symbol_do_literal = { NULL,{ fp_doliteral },{ "(DOLIT)" },	0 };
+
+	Symbol * spc;
+
+	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
+		switch (spc->type) {
+			case QLF_TYPE_IMMEDIATE:	spc->fun();							break;
+			case QLF_TYPE_CONSTANT:		
+			case QLF_TYPE_PRIMITIVE:	
+			case QLF_TYPE_MACRO:		*(Symbol **)ql4thvm_here = spc;	
+																			break;
+			default:
+				QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
+				break;
+		}
+	}
+	else if (forth_number(token_word)) {
+		*(Symbol **)ql4thvm_here++ = &symbol_do_literal;
+		*ql4thvm_here++ = token_value.ival;
+	}
+	else {
+		QLForth_error("\'%s\' : word not found. [3]", token_word);
+	}
+}
+
 static void ql4th_interpreter(char * text) {
 	char * p;
 	scan_ptr = text_ptr = text;
@@ -281,6 +321,7 @@ static void ql4th_interpreter(char * text) {
 				case QLF_STATE_INTERACTIVE: qlforth_interactive();					break;
 				case QLF_STATE_INTERPRET:	qlforth_interpret();					break;
 				case QLF_STATE_COMPILE:		qlforth_compile();						break;
+				case QLF_STATE_MACRO:		qlforth_macro();						break;
 			}
 		}
 
@@ -288,446 +329,6 @@ static void ql4th_interpreter(char * text) {
 			QLForth_error("Unexpect END-OF-File", NULL);
 		}
 	}
-}
-
-// ************  Primitive, execution only on host like macro *************************
-
-static void cfp_dup(void) {
-	*ql4thvm_dp++ = ql4thvm_tos;
-}
-
-static void cfp_qdup(void) {
-	if (ql4thvm_tos) {
-		*ql4thvm_dp++ = ql4thvm_tos;
-	}
-}
-
-static void cfp_drop(void) {
-	ql4thvm_tos = *(--ql4thvm_dp);
-}
-
-static void cfp_over(void) {
-	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_dp - 2);
-}
-
-static void cfp_swap(void) {
-	QLF_CELL tmp;
-
-	tmp = *(ql4thvm_dp - 1);
-	*(ql4thvm_dp - 1) = ql4thvm_tos;
-	ql4thvm_tos = tmp;
-}
-
-static void cfp_rot(void) {
-	QLF_CELL tmp;
-
-	tmp = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_dp - 2);
-	*(ql4thvm_dp - 2) = *(ql4thvm_dp - 1);
-	*(ql4thvm_dp - 1) = tmp;
-}
-
-static void cfp_mrot(void) {
-	QLF_CELL tmp;
-
-	tmp = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_dp - 1);
-	*(ql4thvm_dp - 1) = *(ql4thvm_dp - 2);
-	*(ql4thvm_dp - 2) = tmp;
-}
-
-static void cfp_pick(void) {
-	if (&ql4thvm_stack[ql4thvm_tos] < ql4thvm_dp) {
-		ql4thvm_tos = *(ql4thvm_dp - ql4thvm_tos - 1);
-	}
-}
-
-static void cfp_roll(void) {
-	QLF_CELL * ptr;
-
-	if (&ql4thvm_stack[ql4thvm_tos] < ql4thvm_dp) {
-		ptr = ql4thvm_dp - ql4thvm_tos - 1;
-		ql4thvm_tos = *ptr;
-		for (; ptr < ql4thvm_dp; ptr++) {
-			*ptr = *(ptr + 1);
-		}
-		ql4thvm_dp--;
-	}
-}
-
-static void cfp_depth(void) {
-	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = (QLF_CELL) (ql4thvm_dp - &ql4thvm_stack[1]);
-}
-
-static void cfp_plus(void) {
-	ql4thvm_tos += *(--ql4thvm_dp);
-}
-
-static void cfp_minus(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = nos - ql4thvm_tos;
-}
-
-static void cfp_mul(void) {
-	ql4thvm_tos *= *(--ql4thvm_dp);
-}
-
-static void cfp_div(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = nos / ql4thvm_tos;
-}
-
-static void cfp_mod(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = nos % ql4thvm_tos;
-}
-
-static void cfp_divmod(void) {
-	QLF_CELL nos, quot;
-
-	if (ql4thvm_tos != 0) {
-		nos = *(ql4thvm_dp - 1);
-		quot = nos / ql4thvm_tos;
-		*(ql4thvm_dp - 1) = nos % ql4thvm_tos;
-		ql4thvm_tos = quot;
-	}
-}
-
-static void cfp_1_add(void) {
-	ql4thvm_tos++;
-}
-
-static void cfp_1_sub(void) {
-	ql4thvm_tos--;
-}
-
-static void cfp_2_add(void) {
-	ql4thvm_tos += 2;
-}
-
-static void cfp_2_sub(void) {
-	ql4thvm_tos -= 2;
-}
-
-static void cfp_2_mul(void) {
-	ql4thvm_tos <<= 1;
-}
-
-static void cfp_2_div(void) {
-	ql4thvm_tos >>= 1;
-}
-
-static void cfp_4_add(void) {
-	ql4thvm_tos += 4;
-}
-
-static void cfp_4_sub(void) {
-	ql4thvm_tos -= 4;
-}
-
-static void cfp_min(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos < ql4thvm_tos) ? nos : ql4thvm_tos;
-}
-
-static void cfp_max(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos > ql4thvm_tos) ? nos : ql4thvm_tos;
-}
-
-static void cfp_abs(void) {
-	ql4thvm_tos = (ql4thvm_tos >= 0) ? ql4thvm_tos : (-ql4thvm_tos);
-}
-
-static void cfp_negate(void) {
-	ql4thvm_tos = -ql4thvm_tos;
-}
-
-static void cfp_cmp_lt(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos < ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_le(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos <= ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_ne(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos != ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_eq(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos == ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_gt(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos > ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_ge(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos >= ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_0_lt(void) {
-	ql4thvm_tos = (ql4thvm_tos < 0) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_0_eq(void) {
-	ql4thvm_tos = (ql4thvm_tos == 0) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_0_gt(void) {
-	ql4thvm_tos = (ql4thvm_tos > 0) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_and(void) {
-	ql4thvm_tos &= *(--ql4thvm_dp);
-}
-
-static void cfp_or(void) {
-	ql4thvm_tos |= *(--ql4thvm_dp);
-}
-
-static void cfp_xor(void) {
-	ql4thvm_tos ^= *(--ql4thvm_dp);
-}
-
-static void cfp_not(void) {
-	ql4thvm_tos = ~ql4thvm_tos;
-}
-
-static void cfp_f_plus(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval += *(QLF_REAL *)(--ql4thvm_dp);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_minus(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (*(QLF_REAL *)(--ql4thvm_dp)) - data.fval;
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_mul(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval *= *(QLF_REAL *)(--ql4thvm_dp);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_div(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (*(QLF_REAL *)(--ql4thvm_dp)) / data.fval;
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_lt(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval < (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_le(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval <= (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_ne(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval != (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_eq(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval == (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_gt(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval > (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_ge(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval >= (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_abs(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (data.fval >= 0.0) ? data.fval : (-data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_acos(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)acos((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_asin(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)asin((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_atan(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)acos((double)data.fval); ;
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_atan2(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)atan2((double)(*(QLF_REAL *)(--ql4thvm_dp)), (double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_cos(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)cos((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_exp(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)exp((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_float(void) {
-}
-
-static void cfp_f_log(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)log((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_log10(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)log10((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_max(void) {
-	QLF_LITERAL a, b;
-
-	a.ival = ql4thvm_tos;
-	b.ival = *(--ql4thvm_dp);
-	ql4thvm_tos = (a.fval > b.fval) ? a.ival : b.ival;
-}
-
-static void cfp_f_min(void) {
-	QLF_LITERAL a, b;
-
-	a.ival = ql4thvm_tos;
-	b.ival = *(--ql4thvm_dp);
-	ql4thvm_tos = (a.fval < b.fval) ? a.ival : b.ival;
-}
-
-static void cfp_f_negate(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = -(data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_pow(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)pow((double)(*(QLF_REAL *)(--ql4thvm_dp)), (double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_sin(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)sin((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_sqrt(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)sqrt((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_tan(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)tan((double)data.fval);
-	ql4thvm_tos = data.ival;
 }
 
 // ************  CONSTANT, WORD, COLON, Complier words ********************************
@@ -752,211 +353,6 @@ static void cfp_constant(void) {
 	spc->fun	= fp_doconst;
 	spc->dfa	= ql4thvm_tos;
 	ql4thvm_tos = * (-- ql4thvm_dp);
-}
-
-static void cfp_colon(void) {
-	if (!QLForth_token()) {
-		QLForth_error("Expect a word", NULL);
-	}
-
-	if ((ThisCreateWord = QLForth_symbol_add(token_word)) == NULL) {
-		return;
-	}
-	ThisCreateWord->type = QLF_TYPE_WORD;
-	ThisCreateWord->dfa = 0;
-	ThisCreateWord->hidden = 1;
-	ThisCreateWord->sst = QLForth_sst_append(SST_COLON, (SSTNode *) ThisCreateWord);
-	cs_ptr = &cs_stack[0];
-	cs_ptr->id		= CSID_COLON;
-	ql4thvm_state	= QLF_STATE_COMPILE;
-	cs_ptr++;
-}
-
-static void cfp_macro(void) {
-	if (!QLForth_token()) {
-		QLForth_error("Expect a word", NULL);
-	}
-
-	if ((ThisCreateWord = QLForth_symbol_add(token_word)) == NULL) {
-		return;
-	}
-	ThisCreateWord->type	= QLF_TYPE_MACRO;
-	ThisCreateWord->dfa		= 0;
-	ThisCreateWord->hidden	= 1;
-	cs_ptr					= &cs_stack[0];
-	cs_ptr->id				= CSID_MACRO;
-	ql4thvm_state = QLF_STATE_COMPILE;
-	cs_ptr++;
-}
-
-static void cfp_semicolon(void) {
-	cs_ptr--;
-	if ((cs_ptr != &cs_stack[0]) || (cs_ptr->id != CSID_COLON)) {
-		QLForth_error("Syntax structure mismatched or in-completely", NULL);
-	}
-	cs_ptr--;
-
-	if (ql4thvm_state != QLF_STATE_COMPILE) {
-		QLForth_error("State changed during word compilation", NULL);
-	}
-	QLForth_sst_append(SST_RET, NULL);
-	QLForth_sst_append(SST_SEMICOLON, NULL);
-	ql4thvm_state = QLF_STATE_INTERPRET;
-
-	ThisCreateWord->hidden = 0;
-	ThisCreateWord = NULL;
-}
-
-static void cfp_variable(void) {
-	Symbol	* spc;
-
-	if (!QLForth_token()) {
-		QLForth_error("Expect a word", NULL);
-	}
-
-	if ((spc = QLForth_symbol_add(token_word)) == NULL) {
-		return;
-	}
-	spc->type = QLF_TYPE_VARIABLE;
-	QLForth_sst_append(SST_VARIABLE, (SSTNode *) spc);
-	spc->dfa 	= 0;
-	ql4thvm_here++;
-}
-
-static void cfp_if(void) {
-	cs_ptr++;
-	cs_ptr->id = CSID_IF;
-	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, NULL);
-}
-
-static void cfp_else(void) {
-	SSTNode * sst;
-
-	if (cs_ptr->id != CSID_IF) {
-		QLForth_error("No IF for this ELSE", NULL);
-	}
-	sst = QLForth_sst_append(SST_BRANCH, NULL);
-	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
-	cs_ptr->sst = sst;
-}
-
-static void cfp_endif(void) {
-	if (cs_ptr->id != CSID_IF) {
-		QLForth_error("No IF for this THEN/ENDIF", NULL);
-	}
-	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
-	cs_ptr--;
-}
-
-static void cfp_begin(void) {
-	cs_ptr++;
-	cs_ptr->id = CSID_BEGIN;
-	cs_ptr->sst = QLForth_sst_append(SST_LABEL, NULL);
-	cs_ptr->pos = ql4thvm_here;
-}
-
-static void cfp_while(void) {
-	if (cs_ptr->id != CSID_BEGIN) {
-		QLForth_error("No BEGIN for this WHILE", NULL);
-	}
-	cs_ptr++;
-	cs_ptr->id = CSID_WHILE;
-	cs_ptr->sst = QLForth_sst_append(SST_0_BRANCH, NULL);
-}
-
-static void cfp_repeat(void) {
-	SSTNode * sst;
-
-	if (cs_ptr->id != CSID_WHILE) {
-		QLForth_error("No WHILE for this REPEAT", NULL);
-	}
-	sst = QLForth_sst_append(SST_BRANCH, NULL);
-	cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
-	cs_ptr--;
-	sst->sst = cs_ptr->sst;
-	cs_ptr--;
-}
-
-static void cfp_until(void) {
-	if (cs_ptr->id != CSID_BEGIN) {
-		QLForth_error("No WHILE for this UNTIL", NULL);
-	}
-	QLForth_sst_append(SST_0_BRANCH, cs_ptr->sst);
-	cs_ptr--;
-}
-
-static void cfp_do(void) {
-	cs_ptr++;
-	cs_ptr->id = CSID_DO;
-	cs_ptr->sst = QLForth_sst_append(SST_DO, NULL);
-}
-
-static void cfp_loop(void) {
-	if (cs_ptr->id != CSID_DO) {
-		QLForth_error("No DO matched this LOOP", NULL);
-	}
-	QLForth_sst_append(SST_LOOP, cs_ptr->sst);
-	cs_ptr--;
-}
-
-static void cfp_leave(void) {
-
-	CONTROL_STACK * csp;
-
-	for (csp = cs_ptr; csp->id != SST_COLON && csp > cs_stack; csp--) {
-		if (csp->id == CSID_DO) {
-			break;
-		}
-	}
-	if (csp->id == SST_COLON || csp == cs_stack) {
-		QLForth_error("No DO or FOR matched this EXIT", NULL);
-	}
-	QLForth_sst_append(SST_LEAVE, csp->sst);
-}
-
-static void cfp_for(void) {
-	cs_ptr++;
-	cs_ptr->id = CSID_FOR;
-	cs_ptr->sst = QLForth_sst_append(SST_FOR, NULL);
-	cs_ptr->pos = ql4thvm_here;
-}
-
-static void cfp_next(void) {
-
-	if (cs_ptr->id != CSID_FOR) {
-		QLForth_error("No FOR  with this NEXT", NULL);
-	}
-	QLForth_sst_append(SST_NEXT, cs_ptr->sst);
-	cs_ptr--;
-}
-
-static void cfp_tick(void) {
-	Symbol * spc;
-	char * p;
-
-	if (!QLForth_token()) {
-		QLForth_error("Expect a word", NULL);
-	}
-	for (p = token_word; *p; ++p) * p = toupper(*p);
-	if ((spc = QLForth_symbol_search(token_word)) == NULL) {
-		QLForth_error("Word not found", token_word);
-	}
-}
-
-static void cfp_sharp(void) {
-	SSTNode * sst;
-	
-	sst = QLForth_sst_append(SST_LITERAL, NULL);
-	sst->val = ql4thvm_tos;
-	ql4thvm_tos = *(--ql4thvm_dp);
-}
-
-static void cfp_allot(void) {
-	SSTNode * sst;
-	
-	sst = QLForth_sst_append(SST_ALLOT, NULL);
-	sst->val = ql4thvm_tos;
-	ql4thvm_tos = *(--ql4thvm_dp);
 }
 
 // ************  Forth Command for developers *****************************************
@@ -1016,119 +412,22 @@ static Primitive command_table[] = {
 	{ "SEE",			cfp_see				},
 	{ "CLEAR",			forth_clear			},
 
-	{ NULL,				NULL				}
+	{ NULL,				NULL 	}
 };
 
 static Primitive define_table[] = {
 	{ "CONSTANT",		cfp_constant		},
-	{ ":",				cfp_colon			},
-	{ "VARIABLE",		cfp_variable		},
-
-	{ "MACRO",			cfp_macro			},
-	{ "::",				cfp_macro			},
 	
-	{ NULL,				NULL				}
+	{ NULL,				NULL	}
 
 } ;
 
 static Primitive immediate_table[] = {
-	{ ";",				cfp_semicolon },
-	{ "\'",				cfp_tick },
-	{ "#",				cfp_sharp },
-	{ "ALLOT",			cfp_allot },
-
-	{ "IF",				cfp_if		},
-	{ "ELSE",			cfp_else 	},
-	{ "ENDIF",			cfp_endif },
-	{ "THEN",			cfp_endif },
-	{ "BEGIN",			cfp_begin },
-	{ "WHILE",			cfp_while },
-	{ "REPEAT",			cfp_repeat },
-	{ "UNTIL",			cfp_until },
-	{ "DO",				cfp_do },
-	{ "LOOP",			cfp_loop },
-	{ "LEAVE",			cfp_leave },
-	{ "FOR",			cfp_for },
-	{ "NEXT",			cfp_next },
 
 	{ NULL,			NULL }
 };
 
 static Primitive primitive_table[] = {
-	{ "DROP",			cfp_drop	},
-	{ "DUP",			cfp_dup		},
-	{ "?DUP",			cfp_qdup	},
-	{ "OVER",			cfp_over	},
-	{ "SWAP",			cfp_swap	},
-	{ "ROT",			cfp_rot		},
-	{ "-ROT",			cfp_mrot	},
-	{ "PICK",			cfp_pick	},
-	{ "ROLL",			cfp_roll	},
-
-	{ "DEPTH",			cfp_depth	},
-
-	{ "+",				cfp_plus	},
-	{ "-",				cfp_minus	},
-	{ "*",				cfp_mul		},
-	{ "/",				cfp_div		},
-	{ "MOD",			cfp_mod		},
-	{ "/MOD",			cfp_divmod	},
-	{ "1+",				cfp_1_add	},
-	{ "1-",				cfp_1_sub	},
-	{ "2+",				cfp_2_add	},
-	{ "2-",				cfp_2_sub	},
-	{ "2*",				cfp_2_mul	},
-	{ "2/",				cfp_2_div	},
-	{ "4+",				cfp_4_add	},
-	{ "4-",				cfp_4_sub	},
-
-	{ "MIN",			cfp_min		},
-	{ "MAX",			cfp_max		},
-	{ "ABS",			cfp_abs		},
-	{ "NEGATE",			cfp_negate	},
-
-	{ "<",				cfp_cmp_lt	},
-	{ "<=",				cfp_cmp_le	},
-	{ "<>",				cfp_cmp_ne	},
-	{ "=",				cfp_cmp_eq	},
-	{ ">",				cfp_cmp_gt	},
-	{ ">=",				cfp_cmp_ge	},
-	{ "0<",				cfp_cmp_0_lt},
-	{ "0=",				cfp_cmp_0_eq},
-	{ "0>",				cfp_cmp_0_gt},
-
-	{ "AND",			cfp_and		},
-	{ "OR",				cfp_or		},
-	{ "XOR",			cfp_xor		},
-	{ "NOT",			cfp_not		},
-
-	{ "F+",				cfp_f_plus	},
-	{ "F-",				cfp_f_minus },
-	{ "F*",				cfp_f_mul	},
-	{ "F/",				cfp_f_div	},
-	{ "F<",				cfp_f_lt	},
-	{ "F<=",			cfp_f_le	},
-	{ "F<>",			cfp_f_ne	},
-	{ "F=",				cfp_f_eq	},
-	{ "F>",				cfp_f_gt	},
-	{ "F>=",			cfp_f_ge	},
-	{ "FABS",			cfp_f_abs	},
-	{ "ACOS",			cfp_f_acos	},
-	{ "ASIN",			cfp_f_asin	},
-	{ "ATAN",			cfp_f_atan	},
-	{ "ATAN2",			cfp_f_atan2 },
-	{ "COS",			cfp_f_cos	},
-	{ "EXP",			cfp_f_exp	},
-	{ "FLOAT",			cfp_f_float },
-	{ "LOG",			cfp_f_log	},
-	{ "LOG10",			cfp_f_log10 },
-	{ "FMAX",			cfp_f_max	},
-	{ "FMIN",			cfp_f_min	},
-	{ "FNEGATE",		cfp_f_negate},
-	{ "POW",			cfp_f_pow	},
-	{ "SIN",			cfp_f_sin	},
-	{ "SQRT",			cfp_f_sqrt	},
-	{ "TAN",			cfp_f_tan	},
 
 	{ NULL,				NULL }
 };
@@ -1279,6 +578,7 @@ void QLForth_init(char * fname) {
 		spc->type = QLF_TYPE_PRIMITIVE;
 	}
 	
+	Forth_init();
 	current = forth_bucket;
 	Compile_init();
 	Code_init();
