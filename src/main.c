@@ -64,8 +64,7 @@ int QLForth_printf(const char * fmt, ...) {
 	return ret;
 }
 
-int QLForth_display_stack(int base, int depth, int data1, int data2) {
-	QLF_LITERAL ld1, ld2;
+int QLForth_display_stack(int base, int depth, QLF_CELL * data1, QLF_CELL * data2) {
 	if (depth < 1) {
 		depth = 0;
 	}
@@ -73,27 +72,25 @@ int QLForth_display_stack(int base, int depth, int data1, int data2) {
 	if (base == 10) {
 		switch (depth) {
 			case 0:		break;
-			case 1:		QLForth_printf("[TOS] %d ", data1);	break;
-			case 2:		QLForth_printf("[TOS] %d, [NOS] = %d ", data1,  data2); break;
-			default:	QLForth_printf("[TOS] %d, [NOS] = %d, [DEPTH] %d ", data1, data2, depth); break;
+			case 1:		QLForth_printf("[TOS] %d ", data1->ival);	break;
+			case 2:		QLForth_printf("[TOS] %d, [NOS] = %d ", data1->ival,  data2->ival); break;
+			default:	QLForth_printf("[TOS] %d, [NOS] = %d, [DEPTH] %d ", data1->ival, data2->ival, depth); break;
 		}
 	}
 	else if (base == 16) {
 		switch (depth) {
 			case 0:		break;
-			case 1:		QLForth_printf("[TOS] 0x%08X ", data1);	break;
-			case 2:		QLForth_printf("[TOS] 0x%08X, [NOS] = 0x%08X ", data1, data2); break;
-			default:	QLForth_printf("[TOS] 0x%08X, [NOS] = 0x%08X, [DEPTH] %d ", data1, data2, depth); break;
+			case 1:		QLForth_printf("[TOS] 0x%08X ", data1->ival);	break;
+			case 2:		QLForth_printf("[TOS] 0x%08X, [NOS] = 0x%08X ", data1->ival, data2->ival); break;
+			default:	QLForth_printf("[TOS] 0x%08X, [NOS] = 0x%08X, [DEPTH] %d ", data1->ival, data2->ival, depth);	break;
 		}
 	}
 	else if (base == 0) {
-		ld1.ival = data1;
-		ld2.ival = data2;
 		switch (depth) {
 			case 0:		break;
-			case 1:		QLForth_printf("[TOS] %6.2f ", ld1.fval);							break;
-			case 2:		QLForth_printf("[TOS] %6.2f, [NOS] = %6.2f", ld1.fval, ld2.fval);	break;
-			default:	QLForth_printf("[TOS] %6.2f, [NOS] = %6.2f, [DEPTH] %d ", ld1.fval, ld2.fval, depth); break;
+			case 1:		QLForth_printf("[TOS] %6.2f ", data1->fval);							break;
+			case 2:		QLForth_printf("[TOS] %6.2f, [NOS] = %6.2f", data1->fval, data2->fval);	break;
+			default:	QLForth_printf("[TOS] %6.2f, [NOS] = %6.2f, [DEPTH] %d ", data1->fval, data2->fval, depth);		break;
 		}
 	}
 	QLForth_printf("Ok. ");

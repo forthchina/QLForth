@@ -150,21 +150,22 @@ void QLForth_chip_program(unsigned char * code_buffer) {
 	ram = (unsigned short *) code_buffer;
 }
 
-int QLForth_chip_execute(int entry, int depth, int * stk) {
-	int idx, * dpc;
+int QLForth_chip_execute(int entry, int depth, QLF_CELL * stk) {
+	int idx;
+	QLF_CELL *dpc;
 
-	for (vpc = vrp = -1, dpc = stk, idx = 0; idx < depth; ) {
-		dstack[idx ++] = * dpc ++;
+	for (vpc = vrp = -1, dpc = stk, idx = 0; idx < depth; dpc ++) {
+		dstack[idx ++] = dpc->ival;
 	}
-	tos = * dpc;
+	tos = dpc->ival;
 	vdp = (depth - 1) & 0x1F;
 
 	execute(entry);
 
 	depth = ((vdp + 1) & 0x1F) - 1;
-	for (dpc = stk, idx = 0; idx <= depth; ) {
-		* dpc ++ = (signed short) (dstack[idx++]) ;
+	for (dpc = stk, idx = 0; idx <= depth; dpc ++) {
+		dpc->ival = (signed short) (dstack[idx++]) ;
 	}
-	* dpc = (signed short) tos;
+	dpc->ival = (signed short) tos;
 	return (vdp + 1) & 0x1F;
 }

@@ -27,8 +27,11 @@
 
 #endif
 
-typedef int     QLF_CELL;
-typedef float   QLF_REAL;
+typedef struct _qlf_cell {
+	int		ival;
+	float	fval;
+	void   * ptr;
+} QLF_CELL;
 
 typedef enum {
 	QLF_TRUE = -1L,
@@ -97,11 +100,6 @@ typedef struct _tag_primitive {
 	PRIMITIVE_FUNCTION fun;
 } Primitive;
 
-typedef union _tag_cell {
-    QLF_CELL    ival;
-    QLF_REAL    fval;
-} QLF_LITERAL;
-
 typedef struct _tag_symbol {
 	struct	_tag_symbol * link;
 
@@ -115,9 +113,9 @@ typedef struct _tag_symbol {
 	union {
         char *  pname;
 		char *	text;
-	    QLF_CELL dfa;
-        QLF_CELL ival;
-        QLF_CELL fval;
+	    QLF_CELL * dfa;
+        int		ival;
+        float   fval;
     }; 
 
 	char type, hidden, attr, name[1];
@@ -139,19 +137,13 @@ typedef struct _sst_node {
 	char	type, not_used;
 } SSTNode;
 
-typedef struct _cstack {
-	int			id;
-	union {
-		QLF_CELL	* pos;
-		SSTNode		* sst;
-	};
-
-} CONTROL_STACK;
-
 // ************************************************************************************
 
-extern QLF_CELL		ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
-extern char			token_word[];
+QLF_CELL		* ql4thvm_here, ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack,
+				token_value;
+char			token_word[];
+Symbol			** program_counter, *ThisCreateWord, *ThisExecuteWord;
+int				ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
 
 // ************************************************************************************
 
@@ -169,16 +161,12 @@ extern char			token_word[];
 							stack_error(); return; } \
 						} while (0);
 
-// ************************************************************************************
-
-void	qlforth_fp_docreate		(void);
-void	* qlforth_alloc			(int size_in_byte);
 
 // ************************************************************************************
 
 int  QLForth_printf				(const char * fmt, ...);
-int  QLForth_display_stack		(int base, int depth, int data1, int data2);
-void QLForth_report				(int msg, int data1, int data2, char * str);
+int  QLForth_display_stack		(int base, int depth, QLF_CELL * data1, QLF_CELL * data3);
+void QLForth_report				(int msg,  int data1, int data2, char * str);
 
 void QLForth_init				(char * file_name);
 void QLForth_interpreter		(char * text);
@@ -189,6 +177,7 @@ Symbol * QLForth_symbol_search  (char * name);
 Symbol * QLForth_symbol_add		(char * name);
 SSTNode * QLForth_sst_append	(int type, SSTNode * pc);
 void Compile_init				(void);
+void Forth_init					(void);
 void QLForth_sst_list			(SSTNode * start, SSTNode * sst);
 void Code_init					(void);
 void Code_generation			(SSTNode * start);
@@ -196,6 +185,6 @@ void Code_generation			(SSTNode * start);
 int	 QLForth_chip_read			(int vpc);
 void QLForth_chip_write			(int vpc, int data);
 void QLForth_chip_program		(unsigned char * code_buffer);
-int  QLForth_chip_execute		(int vpc, int depth, int * dstack);
+int  QLForth_chip_execute		(int vpc, int depth, QLF_CELL * dstack);
 
 #endif // _QLFORTH_H_
