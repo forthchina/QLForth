@@ -45,11 +45,7 @@
 #include "QLForth.h"
 
 typedef struct _cstack {
-<<<<<<< HEAD
 	int		id;
-=======
-	int			id;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	union {
 		QLF_CELL	* pos;
 		SSTNode		* sst;
@@ -62,7 +58,6 @@ static CONTROL_STACK cs_stack[MAX_CONTROL_STACK_DEEP + 1], *cs_ptr;
 // ************  Primitive, execution only on host like macro *************************
 
 static void cfp_dup(void) {
-<<<<<<< HEAD
 	ql4thvm_dp->ptr = ql4thvm_tos.ptr;
 	ql4thvm_dp++;
 }
@@ -71,19 +66,10 @@ static void cfp_qdup(void) {
 	if (ql4thvm_tos.ival) {
 		ql4thvm_dp->ptr = ql4thvm_tos.ptr;
 		ql4thvm_dp++;
-=======
-	*ql4thvm_dp++ = ql4thvm_tos;
-}
-
-static void cfp_qdup(void) {
-	if (ql4thvm_tos) {
-		*ql4thvm_dp++ = ql4thvm_tos;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	}
 }
 
 static void cfp_drop(void) {
-<<<<<<< HEAD
 	ql4thvm_dp--;
 	ql4thvm_tos.ptr = ql4thvm_dp->ptr;
 }
@@ -123,64 +109,17 @@ static void cfp_mrot(void) {
 static void cfp_pick(void) {
 	if (&ql4thvm_stack[ql4thvm_tos.ival] < ql4thvm_dp) {
 		ql4thvm_tos.ptr = (ql4thvm_dp - ql4thvm_tos.ival - 1)->ptr;
-=======
-	ql4thvm_tos = *(--ql4thvm_dp);
-}
-
-static void cfp_over(void) {
-	*ql4thvm_dp++ = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_dp - 2);
-}
-
-static void cfp_swap(void) {
-	QLF_CELL tmp;
-
-	tmp = *(ql4thvm_dp - 1);
-	*(ql4thvm_dp - 1) = ql4thvm_tos;
-	ql4thvm_tos = tmp;
-}
-
-static void cfp_rot(void) {
-	QLF_CELL tmp;
-
-	tmp = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_dp - 2);
-	*(ql4thvm_dp - 2) = *(ql4thvm_dp - 1);
-	*(ql4thvm_dp - 1) = tmp;
-}
-
-static void cfp_mrot(void) {
-	QLF_CELL tmp;
-
-	tmp = ql4thvm_tos;
-	ql4thvm_tos = *(ql4thvm_dp - 1);
-	*(ql4thvm_dp - 1) = *(ql4thvm_dp - 2);
-	*(ql4thvm_dp - 2) = tmp;
-}
-
-static void cfp_pick(void) {
-	if (&ql4thvm_stack[ql4thvm_tos] < ql4thvm_dp) {
-		ql4thvm_tos = *(ql4thvm_dp - ql4thvm_tos - 1);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	}
 }
 
 static void cfp_roll(void) {
 	QLF_CELL * ptr;
 
-<<<<<<< HEAD
 	if (&ql4thvm_stack[ql4thvm_tos.ival] < ql4thvm_dp) {
 		ptr = ql4thvm_dp - ql4thvm_tos.ival - 1;
 		ql4thvm_tos.ptr = ptr->ptr;
 		for (; ptr < ql4thvm_dp; ptr++) {
 			ptr->ptr = (ptr + 1)->ptr;
-=======
-	if (&ql4thvm_stack[ql4thvm_tos] < ql4thvm_dp) {
-		ptr = ql4thvm_dp - ql4thvm_tos - 1;
-		ql4thvm_tos = *ptr;
-		for (; ptr < ql4thvm_dp; ptr++) {
-			*ptr = *(ptr + 1);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		}
 		ql4thvm_dp--;
 	}
@@ -188,7 +127,6 @@ static void cfp_roll(void) {
 
 static void cfp_depth(void) {
 	*ql4thvm_dp++ = ql4thvm_tos;
-<<<<<<< HEAD
 	ql4thvm_tos.ival = (int)(ql4thvm_dp - &ql4thvm_stack[1]);
 }
 
@@ -225,53 +163,10 @@ static void cfp_divmod(void) {
 		quot = nos / ql4thvm_tos.ival;
 		(ql4thvm_dp - 1)->ival = nos % ql4thvm_tos.ival;
 		ql4thvm_tos.ival = quot;
-=======
-	ql4thvm_tos = (QLF_CELL)(ql4thvm_dp - &ql4thvm_stack[1]);
-}
-
-static void cfp_plus(void) {
-	ql4thvm_tos += *(--ql4thvm_dp);
-}
-
-static void cfp_minus(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = nos - ql4thvm_tos;
-}
-
-static void cfp_mul(void) {
-	ql4thvm_tos *= *(--ql4thvm_dp);
-}
-
-static void cfp_div(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = nos / ql4thvm_tos;
-}
-
-static void cfp_mod(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = nos % ql4thvm_tos;
-}
-
-static void cfp_divmod(void) {
-	QLF_CELL nos, quot;
-
-	if (ql4thvm_tos != 0) {
-		nos = *(ql4thvm_dp - 1);
-		quot = nos / ql4thvm_tos;
-		*(ql4thvm_dp - 1) = nos % ql4thvm_tos;
-		ql4thvm_tos = quot;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	}
 }
 
 static void cfp_1_add(void) {
-<<<<<<< HEAD
 	ql4thvm_tos.ival;
 }
 
@@ -469,266 +364,12 @@ static void cfp_f_cos(void) {
 
 static void cfp_f_exp(void) {
 	ql4thvm_tos.fval = (float)exp((double)ql4thvm_tos.fval);
-=======
-	ql4thvm_tos++;
-}
-
-static void cfp_1_sub(void) {
-	ql4thvm_tos--;
-}
-
-static void cfp_2_add(void) {
-	ql4thvm_tos += 2;
-}
-
-static void cfp_2_sub(void) {
-	ql4thvm_tos -= 2;
-}
-
-static void cfp_2_mul(void) {
-	ql4thvm_tos <<= 1;
-}
-
-static void cfp_2_div(void) {
-	ql4thvm_tos >>= 1;
-}
-
-static void cfp_4_add(void) {
-	ql4thvm_tos += 4;
-}
-
-static void cfp_4_sub(void) {
-	ql4thvm_tos -= 4;
-}
-
-static void cfp_min(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos < ql4thvm_tos) ? nos : ql4thvm_tos;
-}
-
-static void cfp_max(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos > ql4thvm_tos) ? nos : ql4thvm_tos;
-}
-
-static void cfp_abs(void) {
-	ql4thvm_tos = (ql4thvm_tos >= 0) ? ql4thvm_tos : (-ql4thvm_tos);
-}
-
-static void cfp_negate(void) {
-	ql4thvm_tos = -ql4thvm_tos;
-}
-
-static void cfp_cmp_lt(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos < ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_le(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos <= ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_ne(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos != ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_eq(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos == ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_gt(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos > ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_ge(void) {
-	QLF_CELL nos;
-
-	nos = *(--ql4thvm_dp);
-	ql4thvm_tos = (nos >= ql4thvm_tos) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_0_lt(void) {
-	ql4thvm_tos = (ql4thvm_tos < 0) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_0_eq(void) {
-	ql4thvm_tos = (ql4thvm_tos == 0) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_cmp_0_gt(void) {
-	ql4thvm_tos = (ql4thvm_tos > 0) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_and(void) {
-	ql4thvm_tos &= *(--ql4thvm_dp);
-}
-
-static void cfp_or(void) {
-	ql4thvm_tos |= *(--ql4thvm_dp);
-}
-
-static void cfp_xor(void) {
-	ql4thvm_tos ^= *(--ql4thvm_dp);
-}
-
-static void cfp_not(void) {
-	ql4thvm_tos = ~ql4thvm_tos;
-}
-
-static void cfp_f_plus(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval += *(QLF_REAL *)(--ql4thvm_dp);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_minus(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (*(QLF_REAL *)(--ql4thvm_dp)) - data.fval;
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_mul(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval *= *(QLF_REAL *)(--ql4thvm_dp);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_div(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (*(QLF_REAL *)(--ql4thvm_dp)) / data.fval;
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_lt(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval < (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_le(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval <= (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_ne(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval != (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_eq(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval == (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_gt(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval > (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_ge(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	ql4thvm_tos = (data.fval >= (*(QLF_REAL *)(--ql4thvm_dp))) ? QLF_TRUE : QLF_FALSE;
-}
-
-static void cfp_f_abs(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (data.fval >= 0.0) ? data.fval : (-data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_acos(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)acos((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_asin(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)asin((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_atan(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)acos((double)data.fval); ;
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_atan2(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)atan2((double)(*(QLF_REAL *)(--ql4thvm_dp)), (double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_cos(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)cos((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_exp(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)exp((double)data.fval);
-	ql4thvm_tos = data.ival;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 }
 
 static void cfp_f_float(void) {
 }
 
 static void cfp_f_log(void) {
-<<<<<<< HEAD
 	ql4thvm_tos.fval = (float)log((double)ql4thvm_tos.fval);
 }
 
@@ -769,106 +410,23 @@ static void cfp_f_sqrt(void) {
 
 static void cfp_f_tan(void) {
 	ql4thvm_tos.fval = (float)tan((double)ql4thvm_tos.fval);
-=======
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)log((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_log10(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)log10((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_max(void) {
-	QLF_LITERAL a, b;
-
-	a.ival = ql4thvm_tos;
-	b.ival = *(--ql4thvm_dp);
-	ql4thvm_tos = (a.fval > b.fval) ? a.ival : b.ival;
-}
-
-static void cfp_f_min(void) {
-	QLF_LITERAL a, b;
-
-	a.ival = ql4thvm_tos;
-	b.ival = *(--ql4thvm_dp);
-	ql4thvm_tos = (a.fval < b.fval) ? a.ival : b.ival;
-}
-
-static void cfp_f_negate(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = -(data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_pow(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)pow((double)(*(QLF_REAL *)(--ql4thvm_dp)), (double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_sin(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)sin((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_sqrt(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)sqrt((double)data.fval);
-	ql4thvm_tos = data.ival;
-}
-
-static void cfp_f_tan(void) {
-	QLF_LITERAL data;
-
-	data.ival = ql4thvm_tos;
-	data.fval = (QLF_REAL)tan((double)data.fval);
-	ql4thvm_tos = data.ival;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 }
 
 // ************  Helper functions for macro flow control ******************************
 
 static void fp_docol(void) {
-<<<<<<< HEAD
 	ql4thvm_rp--;
 	ql4thvm_rp->ptr = (void *) program_counter;
-=======
-	*ql4thvm_rp-- = ((QLF_CELL) program_counter);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	program_counter = (Symbol **)ThisExecuteWord->dfa;
 }
 
 static void fp_donext(void) {
 	ql4thvm_rp++;
-<<<<<<< HEAD
 	program_counter = (Symbol **)(ql4thvm_rp->ptr);
 }
 
 static void fp_0branch(void) {
 	if (ql4thvm_tos.ival == 0) {
-=======
-	program_counter = (Symbol **)(*ql4thvm_rp);
-}
-
-static void fp_0branch(void) {
-	if (ql4thvm_tos == 0) {
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		program_counter = *(Symbol ***)program_counter;
 	}
 	else {
@@ -882,7 +440,6 @@ static void fp_branch(void) {
 }
 
 static void fp_do_for_next(void) {
-<<<<<<< HEAD
 	ql4thvm_tos.ival--;
 	if (ql4thvm_tos.ival > 0) {
 		program_counter = *(Symbol ***) program_counter;
@@ -890,14 +447,6 @@ static void fp_do_for_next(void) {
 	else {
 		ql4thvm_dp--;
 		ql4thvm_tos.ival = ql4thvm_dp->ival;
-=======
-	ql4thvm_tos--;
-	if (ql4thvm_tos > 0) {
-		program_counter = *(Symbol ***)program_counter;
-	}
-	else {
-		ql4thvm_tos = *(--ql4thvm_dp);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		program_counter++;
 	}
 }
@@ -907,13 +456,8 @@ static void fp_do_leave(void) {
 }
 
 static void fp_do_loop(void) {
-<<<<<<< HEAD
 	ql4thvm_tos.ival++;
 	if (ql4thvm_tos.ival < (ql4thvm_dp - 1)->ival) {
-=======
-	ql4thvm_tos++;
-	if (ql4thvm_tos < *(ql4thvm_dp - 1)) {
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		program_counter = *(Symbol ***)program_counter;
 	}
 	else {
@@ -955,11 +499,7 @@ static void cfp_else(void) {
 	else {
 		*(Symbol **)ql4thvm_here++ = &symbol_branch;
 		ql4thvm_here++;
-<<<<<<< HEAD
 		cs_ptr->pos->ptr = (void *)ql4thvm_here;
-=======
-		*(QLF_CELL *)(cs_ptr->pos) = (QLF_CELL)ql4thvm_here;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		cs_ptr->pos = (QLF_CELL *)(ql4thvm_here - 1);
 	}
 }
@@ -972,11 +512,7 @@ static void cfp_endif(void) {
 		cs_ptr->sst->sst = QLForth_sst_append(SST_LABEL, NULL);
 	}
 	else {
-<<<<<<< HEAD
 		cs_ptr->pos->ptr = (void *)ql4thvm_here;
-=======
-		*(QLF_CELL *)(cs_ptr->pos) = (QLF_CELL)ql4thvm_here;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	}
 	cs_ptr--;
 }
@@ -1022,11 +558,7 @@ static void cfp_repeat(void) {
 		cs_ptr--;
 	}
 	else {
-<<<<<<< HEAD
 		cs_ptr->pos->ptr = (void *)(ql4thvm_here + 2);
-=======
-		*(QLF_CELL *)(cs_ptr->pos) = (QLF_CELL)(ql4thvm_here + 2);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		cs_ptr--;
 		*(Symbol **)ql4thvm_here++ = &symbol_branch;
 		*(QLF_CELL **)ql4thvm_here++ = cs_ptr->pos;
@@ -1042,13 +574,8 @@ static void cfp_until(void) {
 		QLForth_sst_append(SST_0_BRANCH, cs_ptr->sst);
 	}
 	else {
-<<<<<<< HEAD
 		cs_ptr->pos->ptr = (void *) (ql4thvm_here + 2);
 		*(Symbol **)  ql4thvm_here++ = &symbol_0branch;
-=======
-		*(QLF_CELL *)(cs_ptr->pos) = (QLF_CELL)(ql4thvm_here + 2);
-		*(Symbol **)ql4thvm_here++ = &symbol_0branch;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 		*(QLF_CELL **)ql4thvm_here++ = cs_ptr->pos;
 	}
 	cs_ptr--;
@@ -1148,28 +675,18 @@ static void cfp_sharp(void) {
 	SSTNode * sst;
 
 	sst = QLForth_sst_append(SST_LITERAL, NULL);
-<<<<<<< HEAD
 	sst->val = ql4thvm_tos.ival;
 	ql4thvm_dp--;
 	ql4thvm_tos.ptr = ql4thvm_dp->ptr;
-=======
-	sst->val = ql4thvm_tos;
-	ql4thvm_tos = *(--ql4thvm_dp);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 }
 
 static void cfp_allot(void) {
 	SSTNode * sst;
 
 	sst = QLForth_sst_append(SST_ALLOT, NULL);
-<<<<<<< HEAD
 	sst->val = ql4thvm_tos.ival;
 	ql4thvm_dp--;
 	ql4thvm_tos.ptr = ql4thvm_dp->ptr;
-=======
-	sst->val = ql4thvm_tos;
-	ql4thvm_tos = *(--ql4thvm_dp);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 }
 
 // ************************************************************************************
@@ -1184,11 +701,7 @@ static void cfp_macro(void) {
 	}
 	ThisCreateWord->type	= QLF_TYPE_MACRO;
 	ThisCreateWord->fun		= fp_docol;
-<<<<<<< HEAD
 	ThisCreateWord->dfa		= ql4thvm_here;
-=======
-	ThisCreateWord->dfa		= (QLF_CELL)ql4thvm_here;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	ThisCreateWord->hidden	= 1;
 	cs_ptr					= &cs_stack[0];
 	cs_ptr->id				= CSID_MACRO;

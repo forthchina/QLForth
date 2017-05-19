@@ -44,12 +44,7 @@
 
 #include "QLForth.h"
 
-<<<<<<< HEAD
 QLF_CELL		token_value, * ql4thvm_here,	
-=======
-QLF_LITERAL		token_value;
-QLF_CELL		* ql4thvm_here,
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 				ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack;
 char			token_word[TEXT_LINE_SIZE];
 Symbol			** program_counter, *ThisCreateWord, *ThisExecuteWord;
@@ -148,15 +143,12 @@ void * qlforth_alloc(int size_in_byte) {
 	return (void *)pc;
 }
 
-<<<<<<< HEAD
 static void fp_doliteral(void) {
 	ql4thvm_dp->ptr = ql4thvm_tos.ptr;
 	ql4thvm_dp++;
 	ql4thvm_tos.ival = *(int *) program_counter++;
 }
 
-=======
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 static void macro_execute(Symbol * spc) {
 	ThisExecuteWord = spc;
 	program_counter = NULL;
@@ -311,12 +303,8 @@ static void qlforth_macro(void) {
 	}
 	else if (forth_number(token_word)) {
 		*(Symbol **)ql4thvm_here++ = &symbol_do_literal;
-<<<<<<< HEAD
 		*(int *)ql4thvm_here = token_value.ival;
 		ql4thvm_here++;
-=======
-		*ql4thvm_here++ = token_value.ival;
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 	}
 	else {
 		QLForth_error("\'%s\' : word not found. [3]", token_word);
@@ -365,14 +353,9 @@ static void cfp_constant(void) {
 
 	spc->type	= QLF_TYPE_CONSTANT;
 	spc->fun	= fp_doconst;
-<<<<<<< HEAD
 	spc->ival	= ql4thvm_tos.ival;
 	ql4thvm_dp--;
 	ql4thvm_tos.ival = ql4thvm_dp->ival;
-=======
-	spc->dfa	= ql4thvm_tos;
-	ql4thvm_tos = * (-- ql4thvm_dp);
->>>>>>> 4524061676728823e15f3f7e4ad43e43cd79b04e
 }
 
 // ************  Forth Command for developers *****************************************
