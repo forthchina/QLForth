@@ -1,0 +1,4 @@
+( QLForth Macro test) 
+
+:: abc 10 20 + 
+;;

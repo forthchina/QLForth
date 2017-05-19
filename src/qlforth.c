@@ -55,7 +55,7 @@ static QLF_CELL dict_buffer[DICT_BUFFER_SIZE + 4], data_stack[STACK_DEEP_SIZE + 
 static char		* scan_ptr,* text_ptr, * qlforth_text_buffer, interpret_text[TEXT_LINE_SIZE];
 static Symbol	* root_bucket[HASH_SIZE + 1], * forth_bucket[HASH_SIZE + 1], 
 				* working_bucket[HASH_SIZE + 1], ** current;
-static int		err_flag, display_number_base = 0;
+static int		err_flag, display_number_base = 10;
 static SSTNode  sst_buffer[SST_NODE_MAX + 1], *sst_current, * sst_hot_spot;
 static jmp_buf  e_buf;
 
@@ -290,15 +290,18 @@ static void qlforth_macro(void) {
 
 	Symbol * spc;
 
-	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
+	if ((spc = qlforth_root_search(token_word)) == NULL) {
+		spc = QLForth_symbol_search(token_word);
+	}
+	if (spc != NULL) {
 		switch (spc->type) {
 			case QLF_TYPE_IMMEDIATE:	spc->fun();							break;
 			case QLF_TYPE_CONSTANT:		
 			case QLF_TYPE_PRIMITIVE:	
 			case QLF_TYPE_MACRO:		*(Symbol **)ql4thvm_here = spc;	
-																			break;
+										ql4thvm_here++;						break;
 			default:
-				QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
+				QLForth_error("Word - %s - cannot be used in Macro mode", token_word);
 				break;
 		}
 	}
