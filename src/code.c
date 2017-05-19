@@ -60,7 +60,7 @@ static void code_ref_word(char * name) {
 		QLForth_error("The primitive word : %s : not found.", name);
 	}
 	
-	* (short *)& code_buffer[code_ptr] = (short)((spc->ival & 0x1FFF) | 0x4000);
+	* (short *)& code_buffer[code_ptr] = (short)((spc->value.ival & 0x1FFF) | 0x4000);
 	code_ptr += 2;
 }
 
@@ -169,15 +169,15 @@ void Code_generation(SSTNode * sst_start) {
 
 	for (sst = sst_start; sst->type != SST_END; sst++) {
 		switch (sst->type) {
-			case SST_VARIABLE:	sst->spc->ival = code_ptr >> 1;							code_ptr += 2;			break;
-			case SST_COLON:		sst->spc->ival = code_ptr >> 1;													break;
+			case SST_VARIABLE:	sst->spc->value.ival = code_ptr >> 1;					code_ptr += 2;			break;
+			case SST_COLON:		sst->spc->value.ival = code_ptr >> 1;											break;
 			case SST_SEMICOLON:																					break;
-			case SST_LITERAL:	code_literal(sst->val);																	break;
+			case SST_LITERAL:	code_literal(sst->val);															break;
 			case SST_ALLOT:		code_ptr += (sst->val);		
 								if (code_ptr & 0x01) code_ptr++;												break;
 
-			case SST_VAR_REF:	code_word_only((sst->spc->ival & 0x1FFF) | 0x8000);								break;
-			case SST_WORD_REF:  code_word_only((sst->spc->ival & 0x1FFF) | 0x4000);								break;
+			case SST_VAR_REF:	code_word_only((sst->spc->value.ival & 0x1FFF) | 0x8000);						break;
+			case SST_WORD_REF:  code_word_only((sst->spc->value.ival & 0x1FFF) | 0x4000);						break;
 			case SST_LABEL:		sst->val = code_ptr >> 1;														break;
 
 			case SST_0_BRANCH:	

@@ -27,7 +27,7 @@
 
 #endif
 
-typedef struct _qlf_cell {
+typedef union _qlf_cell {
 	int		ival;
 	float	fval;
 	void   * ptr;
@@ -114,8 +114,9 @@ typedef struct _tag_symbol {
         char *  pname;
 		char *	text;
 	    QLF_CELL * dfa;
-        int		ival;
-        float   fval;
+		QLF_CELL value;
+//        int		ival;
+//        float   fval;
     }; 
 
 	char type, hidden, attr, name[1];
@@ -139,11 +140,11 @@ typedef struct _sst_node {
 
 // ************************************************************************************
 
-QLF_CELL		* ql4thvm_here, ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack,
+extern QLF_CELL	* ql4thvm_here, ql4thvm_tos, *ql4thvm_dp, *ql4thvm_rp, *ql4thvm_stack_top, *ql4thvm_stack,
 				token_value;
-char			token_word[];
-Symbol			** program_counter, *ThisCreateWord, *ThisExecuteWord;
-int				ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
+extern char		token_word[];
+extern Symbol	** program_counter, *ThisCreateWord, *ThisExecuteWord;
+extern int		ql4thvm_state, ql4thvm_running, ql4thvm_force_break;
 
 // ************************************************************************************
 

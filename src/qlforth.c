@@ -55,7 +55,7 @@ static QLF_CELL dict_buffer[DICT_BUFFER_SIZE + 4], data_stack[STACK_DEEP_SIZE + 
 static char		* scan_ptr,* text_ptr, * qlforth_text_buffer, interpret_text[TEXT_LINE_SIZE];
 static Symbol	* root_bucket[HASH_SIZE + 1], * forth_bucket[HASH_SIZE + 1], 
 				* working_bucket[HASH_SIZE + 1], ** current;
-static int		err_flag, display_number_base = 10;
+static int		err_flag, display_number_base = 0;
 static SSTNode  sst_buffer[SST_NODE_MAX + 1], *sst_current, * sst_hot_spot;
 static jmp_buf  e_buf;
 
@@ -122,9 +122,10 @@ static Symbol * qlforth_root_search(char * name) {
 
 // ************  Target forth support and interpreter help functions ******************
 
-static void qlforth_push(int val) {
-	*ql4thvm_dp++	 = ql4thvm_tos;
-	ql4thvm_tos.ival = val;
+static void qlforth_push(QLF_CELL * vptr) {
+	ql4thvm_dp->ptr  = ql4thvm_tos.ptr;
+	ql4thvm_dp++;
+	ql4thvm_tos.ptr = vptr->ptr;
 }
 
 void * qlforth_alloc(int size_in_byte) {
@@ -166,7 +167,7 @@ static void debug_word(Symbol * spc) {
 	*ql4thvm_dp = ql4thvm_tos;
 	cnt = (int) (ql4thvm_dp - ql4thvm_stack);
 
-	cnt = QLForth_chip_execute(spc->ival, cnt, ql4thvm_stack);
+	cnt = QLForth_chip_execute(spc->value.ival, cnt, ql4thvm_stack);
 
 	ql4thvm_dp = &data_stack[cnt];
 	ql4thvm_tos = *ql4thvm_dp;
@@ -206,12 +207,12 @@ static void qlforth_interactive(void) {
 
 	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
 		switch (spc->type) {
-			case QLF_TYPE_COMMAND:		spc->fun();					break;
-			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-			case QLF_TYPE_MACRO:		macro_execute(spc);			break;
-			case QLF_TYPE_WORD:			debug_word(spc);			break;
-			case QLF_TYPE_VARIABLE:		debug_variable(spc);		break;
-			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+			case QLF_TYPE_COMMAND:		spc->fun();						break;
+			case QLF_TYPE_PRIMITIVE:	spc->fun();						break;
+			case QLF_TYPE_MACRO:		macro_execute(spc);				break;
+			case QLF_TYPE_WORD:			debug_word(spc);				break;
+			case QLF_TYPE_VARIABLE:		debug_variable(spc);			break;
+			case QLF_TYPE_CONSTANT:		qlforth_push(& (spc->value));	break;
 			case QLF_TYPE_COMPILE:
 				if ((spc = qlforth_root_search(token_word)) != NULL) {
 					if (spc->type == QLF_TYPE_PRIMITIVE) {
@@ -225,7 +226,7 @@ static void qlforth_interactive(void) {
 		}
 	}
 	else if (forth_number(token_word)) {
-		qlforth_push(token_value.ival);
+		qlforth_push(&token_value);
 	}
 	else {
 		QLForth_error("\'%s\' : word not found.[1]", token_word);
@@ -240,18 +241,18 @@ static void qlforth_interpret(void) {
 	}
 	if (spc != NULL) {
 		switch (spc->type) {
-			case QLF_TYPE_COMMAND:		spc->fun();					break;
-			case QLF_TYPE_DEFINE:		spc->fun();					break;
-			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-			case QLF_TYPE_MACRO:		macro_execute(spc);			break;
-			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
+			case QLF_TYPE_COMMAND:		spc->fun();						break;
+			case QLF_TYPE_DEFINE:		spc->fun();						break;
+			case QLF_TYPE_PRIMITIVE:	spc->fun();						break;
+			case QLF_TYPE_MACRO:		macro_execute(spc);				break;
+			case QLF_TYPE_CONSTANT:		qlforth_push(&(spc->value));	break;
 			default:
 				QLForth_error("Word - %s - cannot be used in INTERPRET mode", token_word);
 				break;
 		}
 	}
 	else if (forth_number(token_word)) {
-		qlforth_push(token_value.ival);
+		qlforth_push(& token_value);
 	}
 	else {
 		QLForth_error("\'%s\' : word not found.[2]", token_word);
@@ -263,13 +264,13 @@ static void qlforth_compile(void) {
 
 	if ((spc = QLForth_symbol_search(token_word)) != NULL) {
 		switch (spc->type) {
-			case QLF_TYPE_PRIMITIVE:	spc->fun();					break;
-			case QLF_TYPE_COMPILE:		spc->fun();					break;
-			case QLF_TYPE_IMMEDIATE:	spc->fun();					break;
-			case QLF_TYPE_MACRO:		macro_execute(spc);			break;
-			case QLF_TYPE_CONSTANT:		qlforth_push(spc->ival);	break;
-			case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (SSTNode *) spc); break;
-			case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF,	 (SSTNode *) spc); break;
+			case QLF_TYPE_PRIMITIVE:	spc->fun();											break;
+			case QLF_TYPE_COMPILE:		spc->fun();											break;
+			case QLF_TYPE_IMMEDIATE:	spc->fun();											break;
+			case QLF_TYPE_MACRO:		macro_execute(spc);									break;
+			case QLF_TYPE_CONSTANT:		qlforth_push(&(spc->value));						break;
+			case QLF_TYPE_WORD:			QLForth_sst_append(SST_WORD_REF, (SSTNode *) spc);	break;
+			case QLF_TYPE_VARIABLE:		QLForth_sst_append(SST_VAR_REF,	 (SSTNode *) spc);	break;
 			default:
 				QLForth_error("Word - %s - cannot be used in COMPILE mode", token_word);
 				break;
@@ -277,7 +278,7 @@ static void qlforth_compile(void) {
 		}
 	}
 	else if (forth_number(token_word)) {
-		qlforth_push(token_value.ival);
+		qlforth_push(& token_value);
 	}
 	else {
 		QLForth_error("\'%s\' : word not found. [3]", token_word);
@@ -337,7 +338,7 @@ static void ql4th_interpreter(char * text) {
 static void fp_doconst(void) {
 	ql4thvm_dp->ptr = ql4thvm_tos.ptr;
 	ql4thvm_dp++;
-	ql4thvm_tos.ival = ThisExecuteWord->ival;
+	ql4thvm_tos.ival = ThisExecuteWord->value.ival;
 }
 
 static void cfp_constant(void) {
@@ -353,7 +354,7 @@ static void cfp_constant(void) {
 
 	spc->type	= QLF_TYPE_CONSTANT;
 	spc->fun	= fp_doconst;
-	spc->ival	= ql4thvm_tos.ival;
+	spc->dfa	= (QLF_CELL *) ql4thvm_tos.ptr;
 	ql4thvm_dp--;
 	ql4thvm_tos.ival = ql4thvm_dp->ival;
 }
@@ -398,7 +399,7 @@ static void cfp_see(void) {
 	switch (spc->type) {
 		case QLF_TYPE_COMMAND:		QLForth_printf("Command.\n");									break;
 		case QLF_TYPE_PRIMITIVE:	QLForth_printf("Primitive.\n");									break;
-		case QLF_TYPE_CONSTANT:		QLForth_printf("Constant %d, 0x%08X.\n", spc->ival, spc->ival);	break;
+		case QLF_TYPE_CONSTANT:		QLForth_printf("Constant %d, 0x%08X.\n", spc->value.ival, spc->value.ival);	break;
 		case QLF_TYPE_COMPILE:		QLForth_printf("Compile word.\n");								break;
 		case QLF_TYPE_WORD:			QLForth_sst_list(spc-> sst, sst_buffer);						break;
 		case QLF_TYPE_VARIABLE:		QLForth_printf("Variable @0x%08X.\n", spc->dfa);				break;

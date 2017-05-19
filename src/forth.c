@@ -167,7 +167,7 @@ static void cfp_divmod(void) {
 }
 
 static void cfp_1_add(void) {
-	ql4thvm_tos.ival;
+	ql4thvm_tos.ival++;
 }
 
 static void cfp_1_sub(void) {
@@ -285,8 +285,8 @@ static void cfp_not(void) {
 }
 
 static void cfp_f_plus(void) {
-	ql4thvm_tos.fval += ((ql4thvm_dp - 1)->fval);
 	ql4thvm_dp--;
+	ql4thvm_tos.fval += (ql4thvm_dp->fval);
 }
 
 static void cfp_f_minus(void) {
@@ -787,7 +787,6 @@ static Primitive define_table[] = {
 	{ ":",				cfp_colon			},
 	{ "VARIABLE",		cfp_variable		},
 
-	{ "MACRO",			cfp_macro			},
 	{ "::",				cfp_macro			},
 
 	{ NULL,				NULL	}
@@ -796,7 +795,6 @@ static Primitive define_table[] = {
 static Primitive immediate_table[] = {
 	{ ";",				cfp_semicolon		},
 	{ ";;",				cfp_macro_semicolon },
-	{ ";MACRO",			cfp_macro_semicolon },
 	{ "\'",				cfp_tick			},
 	{ "#",				cfp_sharp			},
 	{ "ALLOT",			cfp_allot			},

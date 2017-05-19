@@ -18,14 +18,17 @@ RM      = rm -f -v
 .PHONY: all clean
 all: $(OBJ_DIR)/$(TARGETS)
 
-$(OBJ_DIR)/QLForth : $(OBJ_DIR)/main.o $(OBJ_DIR)/QLForth.o $(OBJ_DIR)/Code.o $(OBJ_DIR)/Compiler.o $(OBJ_DIR)/Simulator.o
-	$(CC) -o $(OBJ_DIR)/QLForth $(LDFLAGS) $(OBJ_DIR)/main.o $(OBJ_DIR)/QLForth.o $(OBJ_DIR)/Code.o $(OBJ_DIR)/Compiler.o $(OBJ_DIR)/Simulator.o
+$(OBJ_DIR)/QLForth : $(OBJ_DIR)/main.o $(OBJ_DIR)/QLForth.o $(OBJ_DIR)/forth.o $(OBJ_DIR)/Code.o $(OBJ_DIR)/Compiler.o $(OBJ_DIR)/Simulator.o
+	$(CC) -o $(OBJ_DIR)/QLForth $(LDFLAGS) $(OBJ_DIR)/main.o $(OBJ_DIR)/QLForth.o $(OBJ_DIR)/forth.o $(OBJ_DIR)/Code.o $(OBJ_DIR)/Compiler.o $(OBJ_DIR)/Simulator.o
 
 $(OBJ_DIR)/main.o : $(SRC_DIR)/main.c
 	$(CC) $(CFLAGS) -o $(OBJ_DIR)/main.o $(SRC_DIR)/main.c 
 
 $(OBJ_DIR)/QLForth.o : $(SRC_DIR)/QLForth.c
 	$(CC) $(CFLAGS) -o $(OBJ_DIR)/QLForth.o $(SRC_DIR)/QLForth.c 
+	
+$(OBJ_DIR)/forth.o : $(SRC_DIR)/forth.c
+	$(CC) $(CFLAGS) -o $(OBJ_DIR)/forth.o $(SRC_DIR)/forth.c 
 
 $(OBJ_DIR)/Code.o : $(SRC_DIR)/Code.c
 	$(CC) $(CFLAGS) -o $(OBJ_DIR)/Code.o $(SRC_DIR)/Code.c 
