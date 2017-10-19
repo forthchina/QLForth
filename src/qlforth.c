@@ -1,8 +1,8 @@
 /* ************************************************************************************
 * Copyright (C) 2015-2017 Shaanxi QinWei Electroics Technologies. All rights reserved.
 *
-* $Date:        11 May 2017
-* $Revision: 	V 0.5
+* $Date:        18 Oct 2017
+* $Revision: 	V 0.6
 *
 * Project: 	    QLForth - A Forth for System-On-Chip Creative Makers
 *
@@ -13,7 +13,7 @@
 * Target:		Windows 7+ / Linux / Mac OS X
 *
 * Author:		Zhao Yu, forthchina@163.com, forthchina@gmail.com
-*			    25/04/2017 (In dd/mm/yyyy)
+*			    19/10/2017 (In dd/mm/yyyy)
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions
